@@ -55,5 +55,9 @@ We are committed to combining:
 Become a modern and reliable solution for managing software development projects, transforming how companies organize, execute, and deliver technological solutions.
 
 ---
+## 📃 Documentación
+
+[Link a la documentación](https://drive.google.com/drive/folders/1zfUG9TTYgWiPnyqCO4yD6y-5j3vcdfZj?usp=share_link)
+
 
 ### Designed by Friday's.
