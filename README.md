@@ -5,7 +5,7 @@
 
 ## 👨‍💻 Team Members:
 
-- Marco Salinas ⛷️  
+- Marco Salinas ⛷️  👨‍🏫
 - Ivan Ornelas 👾  
 - Fatima Alonso ⭐️  
 - Josué Tijerina 🦧  
