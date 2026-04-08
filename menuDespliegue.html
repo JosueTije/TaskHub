@@ -1,0 +1,293 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tech Mahindra - Full Navigation</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <style>
+    
+        body {
+            margin: 0; padding: 0;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #121212; color: #ffffff;
+            display: flex; height: 100vh; overflow: hidden;
+        }
+
+        /*Barra de  lado*/
+        .sidebar {
+            width: 260px; background-color: #1e1e1e;
+            height: 100%; display: flex; flex-direction: column;
+            transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            border-right: 1px solid #333; z-index: 100;
+        }
+        .sidebar.collapsed { 
+            width: 80px; 
+        }
+
+        .sidebar-header {
+            padding: 20px; height: 60px;
+            display: flex; align-items: center; justify-content: space-between;
+        }
+        .logo-text { 
+            color: #d32f2f; 
+            font-weight: bold; 
+            font-size: 1.1rem; 
+            white-space: nowrap; 
+        }
+
+        .toggle-btn {
+            background: none; border: none; color: #888;
+            cursor: pointer; font-size: 1.2rem; transition: 0.3s;
+        }
+        .toggle-btn:hover { 
+            color: #fff; 
+        }
+
+        /*Items de navegacion*/
+        .nav-section { 
+            flex: 1; 
+            padding-top: 20px; 
+        }
+
+        .nav-item, .role-item {
+            display: flex; align-items: center; padding: 12px 25px;
+            color: #aaaaaa; text-decoration: none; cursor: pointer;
+            margin-right: 15px; border-radius: 0 25px 25px 0;
+            transition: all 0.2s ease; white-space: nowrap;
+        }
+
+        .nav-item:hover, .role-item:hover { 
+            background-color: rgba(255,255,255,0.05); 
+            color: #fff; 
+        }
+
+        /*Clase activa para la sección actual*/
+        .active { 
+            background-color: #e31a2d !important; 
+            color: #fff !important; 
+            font-weight: 600; 
+        }
+
+        .nav-icon { 
+            width: 30px; 
+            margin-right: 15px; 
+            text-align: center; 
+            font-size: 1.1rem; 
+        }
+
+        /*Roles*/
+        .sidebar-footer { 
+            padding: 20px; 
+            border-top: 1px solid #333; 
+        }
+
+        .footer-label { 
+            font-size: 10px; color: #555; 
+            margin-bottom: 10px; 
+            text-transform: uppercase; 
+            letter-spacing: 1px; 
+        }
+
+        /*Estados colapsados*/
+        .sidebar.collapsed .nav-text, 
+        .sidebar.collapsed .logo-text, 
+        .sidebar.collapsed .footer-label,
+        .sidebar.collapsed .role-text { 
+            display: none; 
+        }
+
+        .sidebar.collapsed .nav-item, .sidebar.collapsed .role-item { 
+            justify-content: center; 
+            margin-right: 0; 
+            padding: 12px 0; 
+        }
+        .sidebar.collapsed .nav-icon { 
+            margin-right: 0; 
+        }
+
+        /*Contenido principal*/
+        .main-content { 
+            flex: 1; 
+            padding: 40px; 
+            overflow-y: auto; 
+        }
+
+        .view-section { 
+            display: none; 
+            animation: fadeIn 0.3s ease-out; 
+        }
+
+        .view-section.visible { 
+            display: block; 
+        }
+
+        .sidebar.collapsed .logo-container {
+            width: 0;
+            flex: 0;
+            padding: 0;
+            opacity: 0;
+            pointer-events: none; 
+        }
+
+        .sidebar.collapsed .sidebar-header {
+            justify-content: center;
+        }
+
+        .card {
+            background: #1e1e1e; border: 1px solid #333;
+            padding: 25px; border-radius: 12px; margin-top: 20px;
+        }
+        h1 { 
+            margin: 0; 
+            font-weight: 400; 
+            color: #efefef; 
+        }
+
+    </style>
+</head>
+<body>
+
+    <nav class="sidebar" id="sidebar">
+        <div class="sidebar-header">
+            <div class="logo-container">
+                <img src="logo.png" alt="Tech Mahindra Logo" class="logo-img">
+            </div>
+            <button class="toggle-btn" id="toggleBtn">
+                <i class="fas fa-chevron-left" id="toggleIcon"></i>
+            </button>
+        </div>
+
+        <div class="nav-section">
+            <div class="nav-item active" data-view="view-dashboard">
+                <i class="fas fa-th-large nav-icon"></i>
+                <span class="nav-text">Dashboard</span>
+            </div>
+            <div class="nav-item" data-view="view-proyectos">
+                <i class="fas fa-folder nav-icon"></i>
+                <span class="nav-text">Proyectos</span>
+            </div>
+            <div class="nav-item" data-view="view-metricas">
+                <i class="fas fa-chart-line nav-icon"></i>
+                <span class="nav-text">Métricas</span>
+            </div>
+            <div class="nav-item" data-view="view-ia">
+                <i class="fas fa-magic nav-icon"></i>
+                <span class="nav-text">IA</span>
+            </div>
+            <div class="nav-item" data-view="view-gamificacion">
+                <i class="fas fa-trophy nav-icon"></i>
+                <span class="nav-text">Gamificación</span>
+            </div>
+        </div>
+
+        <div class="sidebar-footer">
+            <div class="footer-label">Cambiar Rol</div>
+            <div class="role-item" data-view="view-admin">
+                <i class="fas fa-user-shield nav-icon"></i>
+                <span class="role-text">Admin</span>
+            </div>
+            <div class="role-item active" data-view="view-pm">
+                <i class="fas fa-user-tie nav-icon"></i>
+                <span class="role-text">PM</span>
+            </div>
+            <div class="role-item" data-view="view-developer">
+                <i class="fas fa-code nav-icon"></i>
+                <span class="role-text">Developer</span>
+            </div>
+        </div>
+    </nav>
+
+    <main class="main-content" id="main-content">
+        <section id="view-dashboard" class="view-section visible">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+                <h1>Dashboard</h1>
+                <div id="user-status-tag" style="background: rgba(46, 204, 113, 0.1); border: 1px solid #2ecc71; padding: 8px 15px; border-radius: 30px; display: flex; align-items: center; gap: 10px; transition: 0.3s;">
+                    <div id="status-dot" style="width: 10px; height: 10px; background-color: #2ecc71; border-radius: 50%; box-shadow: 0 0 8px #2ecc71; animation: pulse 1.5s infinite;"></div>
+                    <span id="status-text" style="font-size: 0.85rem; color: #2ecc71; font-weight: 600;">En línea</span>
+                </div>
+            </div>
+
+            <div class="card">
+                <h3>Resumen de Actividad</h3>
+                <p>El indicador superior cambiará a "Ausente" si sales de esta pestaña.</p>
+            </div>
+        </section>
+        
+        <section id="view-proyectos" class="view-section">
+            <h1>Proyectos</h1>
+            <div class="card">Listado detallado de proyectos activos y finalizados.</div>
+        </section>
+
+        <section id="view-metricas" class="view-section">
+            <h1>Métricas</h1>
+            <div class="card">Gráficas de rendimiento, varianza y cumplimiento de plazos.</div>
+        </section>
+
+        <section id="view-ia" class="view-section">
+            <h1>Inteligencia Artificial</h1>
+            <div class="card">Análisis predictivo de riesgos mediante modelos de ML.</div>
+        </section>
+
+        <section id="view-gamificacion" class="view-section">
+            <h1>Gamificación</h1>
+            <div class="card">Sistema de recompensas, medallas y ranking del equipo.</div>
+        </section>
+
+        <section id="view-admin" class="view-section">
+            <h1>Panel Administrativo</h1>
+            <div class="card">Gestión de usuarios, permisos y configuración global.</div>
+        </section>
+
+        <section id="view-pm" class="view-section">
+            <h1>Project Manager View</h1>
+            <div class="card">Herramientas de gestión de recursos y cronogramas.</div>
+        </section>
+
+        <section id="view-developer" class="view-section">
+            <h1>Developer View</h1>
+            <div class="card">Acceso a tickets de Jira, documentación técnica y repositorios.</div>
+        </section>
+    </main>
+
+    <script>
+        const sidebar = document.getElementById('sidebar');
+        const toggleBtn = document.getElementById('toggleBtn');
+        const toggleIcon = document.getElementById('toggleIcon');
+        
+        //Elementos interactivos
+        const navItems = document.querySelectorAll('.nav-item, .role-item');
+        const sections = document.querySelectorAll('.view-section');
+
+        //Contrae y expande
+        toggleBtn.addEventListener('click', () => {
+            sidebar.classList.toggle('collapsed');
+            if (sidebar.classList.contains('collapsed')) {
+                toggleIcon.classList.replace('fa-chevron-left', 'fa-chevron-right');
+            } else {
+                toggleIcon.classList.replace('fa-chevron-right', 'fa-chevron-left');
+            }
+        });
+
+        //Navega entre secciones
+        navItems.forEach(item => {
+            item.addEventListener('click', () => {
+                //Gestiona clases activas en los botones
+                navItems.forEach(el => el.classList.remove('active'));
+                item.classList.add('active');
+
+                // Mostrar la sección correspondiente
+                const targetViewId = item.getAttribute('data-view');
+                
+                sections.forEach(section => {
+                    section.classList.remove('visible');
+                    if (section.id === targetViewId) {
+                        section.classList.add('visible');
+                    }
+                });
+            });
+        });
+
+    </script>
+</body>
+</html>
