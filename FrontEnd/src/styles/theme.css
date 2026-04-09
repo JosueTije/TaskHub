@@ -1,0 +1,179 @@
+@custom-variant dark (&:is(.dark *));
+
+:root {
+  /* Tech Mahindra Brand Fonts */
+  --font-primary: 'Poppins', -apple-system, BlinkMacSystemFont, 'SF Pro Display', system-ui, sans-serif;
+  --font-headings: 'Georama', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+  
+  /* Tech Mahindra Brand Colors */
+  /* Primary Reds */
+  --mahindra-red: #E31837; /* Main brand color */
+  --clarity-red: #F8B4A3;
+  --impact-red: #5F0229;
+  
+  /* Navy */
+  --blueprint-navy: #0A0638;
+  
+  /* Grays */
+  --anchor-gray-1: #4A453D;
+  --anchor-gray-2: #29251D;
+  --clarity-gray-1: #F6F2EA;
+  --clarity-gray-2: #E5DFD3;
+  
+  /* Neutrals */
+  --tech-white: #FFFFFF;
+  --tech-muted: #8E8E93;
+  
+  /* Application Variables */
+  --font-size: 16px;
+  --background: var(--blueprint-navy);
+  --foreground: var(--tech-white);
+  --card: var(--anchor-gray-2);
+  --card-foreground: var(--tech-white);
+  --popover: var(--anchor-gray-2);
+  --popover-foreground: var(--tech-white);
+  --primary: var(--tech-white);
+  --primary-foreground: var(--blueprint-navy);
+  --secondary: var(--anchor-gray-2);
+  --secondary-foreground: var(--tech-white);
+  --muted: var(--anchor-gray-2);
+  --muted-foreground: var(--tech-muted);
+  --accent: var(--mahindra-red);
+  --accent-foreground: var(--tech-white);
+  --destructive: var(--mahindra-red);
+  --destructive-foreground: var(--tech-white);
+  --border: rgba(255, 255, 255, 0.1);
+  --input: rgba(255, 255, 255, 0.1);
+  --input-background: transparent;
+  --switch-background: var(--anchor-gray-2);
+  --font-weight-medium: 500;
+  --font-weight-normal: 400;
+  --ring: var(--mahindra-red);
+  --chart-1: var(--mahindra-red);
+  --chart-2: var(--impact-red);
+  --chart-3: var(--clarity-red);
+  --chart-4: var(--clarity-gray-2);
+  --chart-5: var(--anchor-gray-1);
+  --radius: 0.75rem; /* 12px */
+  --sidebar: var(--blueprint-navy);
+  --sidebar-foreground: var(--tech-white);
+  --sidebar-primary: var(--mahindra-red);
+  --sidebar-primary-foreground: var(--tech-white);
+  --sidebar-accent: var(--anchor-gray-2);
+  --sidebar-accent-foreground: var(--tech-white);
+  --sidebar-border: rgba(255, 255, 255, 0.1);
+  --sidebar-ring: var(--mahindra-red);
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-input-background: var(--input-background);
+  --color-switch-background: var(--switch-background);
+  --color-ring: var(--ring);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+    font-family: var(--font-primary);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  /**
+  * Default typography styles for HTML elements (h1-h4, p, label, button, input).
+  * These are in @layer base, so Tailwind utility classes (like text-sm, text-lg) automatically override them.
+  */
+
+  html {
+    font-size: var(--font-size);
+  }
+
+  /* Títulos usan Georama Semi Expanded */
+  h1, h2, h3, h4, h5, h6 {
+    font-family: var(--font-headings);
+    font-stretch: semi-expanded;
+    letter-spacing: -0.02em;
+  }
+
+  h1 {
+    font-size: var(--text-2xl);
+    font-weight: 700;
+    line-height: 1.2;
+  }
+
+  h2 {
+    font-size: var(--text-xl);
+    font-weight: 600;
+    line-height: 1.3;
+  }
+
+  h3 {
+    font-size: var(--text-lg);
+    font-weight: 600;
+    line-height: 1.4;
+  }
+
+  h4 {
+    font-size: var(--text-base);
+    font-weight: 600;
+    line-height: 1.5;
+  }
+
+  /* Labels y buttons usan Poppins */
+  label {
+    font-size: var(--text-base);
+    font-weight: var(--font-weight-medium);
+    line-height: 1.5;
+  }
+
+  button {
+    font-size: var(--text-base);
+    font-weight: var(--font-weight-medium);
+    line-height: 1.5;
+  }
+
+  input, textarea, select {
+    font-size: var(--text-base);
+    font-weight: var(--font-weight-normal);
+    line-height: 1.5;
+  }
+}

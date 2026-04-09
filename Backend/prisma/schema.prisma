@@ -1,0 +1,185 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum UserRole {
+  ADMIN
+  PM
+  DEVELOPER
+  VIEWER
+}
+
+enum OtpType {
+  ACCOUNT_SETUP
+}
+
+enum UserStatus {
+  ACTIVE
+  INACTIVE
+  PENDING_SETUP
+}
+
+enum ProjectStatus {
+  ACTIVE
+  ON_HOLD
+  COMPLETED
+  ARCHIVED
+}
+
+enum RiskLevel {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+enum SprintStatus {
+  PLANNING
+  ACTIVE
+  COMPLETED
+  CANCELLED
+}
+
+enum TicketStatus {
+  TODO
+  IN_PROGRESS
+  IN_REVIEW
+  BLOCKED
+  DONE
+  CANCELLED
+}
+
+enum PriorityLevel {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+model User {
+  id                 String          @id @default(uuid())
+  email              String          @unique
+  passwordHash       String
+  fullName           String
+  avatarUrl          String?
+  role               UserRole        @default(DEVELOPER)
+  status             UserStatus      @default(ACTIVE)
+  mustChangePassword Boolean         @default(true)
+  lastLoginAt        DateTime?
+  createdAt          DateTime        @default(now())
+  updatedAt          DateTime        @updatedAt
+  deletedAt          DateTime?
+
+  createdProjects    Project[]       @relation("CreatedProjects")
+  managedProjects    Project[]       @relation("ManagedProjects")
+  projectMemberships ProjectMember[]
+  assignedTickets    Ticket[]        @relation("AssignedTickets")
+  createdTickets     Ticket[]        @relation("CreatedTickets")
+
+  otps               UserOtp[]
+}
+
+model UserOtp {
+  id         String    @id @default(uuid())
+  userId     String
+  type       OtpType
+  codeHash   String
+  expiresAt  DateTime
+  usedAt     DateTime?
+  createdAt  DateTime  @default(now())
+
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, type])
+  @@index([expiresAt])
+}
+
+model Project {
+  id             String         @id @default(uuid())
+  name           String
+  description    String?
+  code           String         @unique
+  status         ProjectStatus  @default(ACTIVE)
+  riskLevel      RiskLevel      @default(LOW)
+  createdById    String
+  pmId           String?
+  startDate      DateTime
+  targetEndDate  DateTime
+  actualEndDate  DateTime?
+  budget         Float?
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+  archivedAt     DateTime?
+
+  createdBy      User           @relation("CreatedProjects", fields: [createdById], references: [id])
+  pm             User?          @relation("ManagedProjects", fields: [pmId], references: [id])
+  members        ProjectMember[]
+  sprints        Sprint[]
+  tickets        Ticket[]
+}
+
+model ProjectMember {
+  id         String    @id @default(uuid())
+  projectId  String
+  userId     String
+  joinedAt   DateTime  @default(now())
+  leftAt     DateTime?
+  createdAt  DateTime  @default(now())
+
+  project    Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([projectId])
+  @@index([userId])
+}
+
+model Sprint {
+  id          String        @id @default(uuid())
+  projectId   String
+  name        String
+  goal        String?
+  status      SprintStatus  @default(PLANNING)
+  capacity    Int           @default(0)
+  startDate   DateTime
+  endDate     DateTime
+  completedAt DateTime?
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  project     Project       @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  tickets     Ticket[]
+
+  @@index([projectId])
+}
+
+model Ticket {
+  id             String         @id @default(uuid())
+  projectId      String
+  sprintId       String
+  parentTicketId String?
+  title          String
+  description    String?
+  status         TicketStatus   @default(TODO)
+  priority       PriorityLevel  @default(MEDIUM)
+  storyPoints    Int?
+  assignedToId   String?
+  createdById    String
+  startedAt      DateTime?
+  completedAt    DateTime?
+  estimatedHours Float?
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+
+  project        Project        @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  sprint         Sprint         @relation(fields: [sprintId], references: [id], onDelete: Cascade)
+  assignedTo     User?          @relation("AssignedTickets", fields: [assignedToId], references: [id])
+  createdBy      User           @relation("CreatedTickets", fields: [createdById], references: [id])
+
+  @@index([projectId])
+  @@index([sprintId])
+  @@index([assignedToId])
+}

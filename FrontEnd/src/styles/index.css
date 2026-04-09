@@ -1,0 +1,65 @@
+@import './fonts.css';
+@import './tailwind.css';
+@import './theme.css';
+
+/* Tech Mahindra Brand Fonts - Global Override */
+@layer utilities {
+  /* Poppins para cuerpo de texto */
+  .font-sans {
+    font-family: 'Poppins', -apple-system, BlinkMacSystemFont, 'SF Pro Display', system-ui, sans-serif;
+  }
+  
+  /* Poppins con números tabulares para códigos y datos */
+  .font-mono {
+    font-family: 'Poppins', -apple-system, BlinkMacSystemFont, 'SF Pro Display', system-ui, sans-serif;
+    font-feature-settings: 'tnum';
+    font-variant-numeric: tabular-nums;
+  }
+  
+  /* Georama Semi Expanded para títulos y elementos de marca */
+  .font-display {
+    font-family: 'Georama', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+    font-stretch: semi-expanded;
+    letter-spacing: -0.02em;
+  }
+  
+  .font-brand {
+    font-family: 'Georama', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+    font-stretch: semi-expanded;
+  }
+}
+
+/* Smooth scrolling */
+html {
+  scroll-behavior: smooth;
+}
+
+/* Custom scrollbar - Tech Mahindra Colors */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: #0A0638;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #29251D;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #4A453D;
+}
+
+/* Asegurar que los títulos usen Georama Semi Expanded */
+.text-2xl,
+.text-3xl,
+.text-4xl,
+.text-5xl,
+.text-6xl {
+  font-family: 'Georama', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+  font-stretch: semi-expanded;
+  letter-spacing: -0.02em;
+}
