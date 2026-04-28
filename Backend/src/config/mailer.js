@@ -25,7 +25,7 @@ async function sendOtpEmail({ to, fullName, otp }) {
         <div style="font-size: 32px; font-weight: bold; letter-spacing: 8px; margin: 24px 0;">
           ${otp}
         </div>
-        <p>Este código vence en 15 minutos.</p>
+        <p>Este código vence en 10 minutos.</p>
       </div>
     `,
   });
