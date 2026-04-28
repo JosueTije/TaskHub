@@ -1,3 +1,5 @@
+//auxiliares
+
 const jwt = require("jsonwebtoken");
 
 function signAccessToken(payload) {

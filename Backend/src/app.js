@@ -4,30 +4,36 @@ const dotenv = require("dotenv");
 const helmet = require("helmet");
 const morgan = require("morgan");
 const cookieParser = require("cookie-parser");
-
 const authRoutes = require("./routes/auth.routes");
 const adminRoutes = require("./routes/admin.routes");
+const userRoutes = require("./routes/user.routes");
+const projectRoutes = require("./routes/project.routes");
+
 
 dotenv.config();
 
 const app = express();
 
-app.use(helmet());
+app.use(helmet()); //protecciónn !!
 app.use(
   cors({
-    origin: "http://localhost:5173",
+    origin: "http://localhost:5173", //permisos!
     credentials: true,
   })
 );
-app.use(express.json());
-app.use(cookieParser());
-app.use(morgan("dev"));
+app.use(express.json()); // recibir
+app.use(cookieParser()); //leer cookiees
+app.use(morgan("dev")); //request de consolaaa
 
 app.get("/", (req, res) => {
   res.json({ message: "Backend TaskHub funcionando!! wuuu :)" });
 });
 
+// rutasssss!!
+
 app.use("/auth", authRoutes);
 app.use("/admin", adminRoutes);
+app.use("/users", userRoutes);
+app.use("/projects", projectRoutes);
 
 module.exports = app;

@@ -89,14 +89,18 @@ export function OTP() {
     setIsLoading(true);
     setError('');
     try {
-      const result = await verifyOTP(code);
-      if (result.success) {
-        navigate('/change-password');
-      } else {
-        setError(result.error || 'Código incorrecto. Intenta de nuevo.');
-        setOtp(['', '', '', '', '', '']);
-        inputRefs.current[0]?.focus();
-      }
+const result = await verifyOTP(code);
+
+if (result.success) {
+  // 🔥 GUARDAR TOKEN
+  localStorage.setItem("setupPasswordToken", result.setupPasswordToken);
+
+  navigate('/change-password');
+} else {
+  setError(result.error || 'Código incorrecto. Intenta de nuevo.');
+  setOtp(['', '', '', '', '', '']);
+  inputRefs.current[0]?.focus();
+}
     } catch (err) {
       setError('Error de conexión. Intenta de nuevo.');
       setOtp(['', '', '', '', '', '']);

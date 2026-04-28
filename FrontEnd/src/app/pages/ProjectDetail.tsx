@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useParams, Link, useNavigate } from 'react-router';
 import { Calendar, TrendingUp, TrendingDown, AlertTriangle, AlertCircle, Target, Users, Clock, CheckCircle2, XCircle, FileText, Zap, Trophy, Award, Plus, X, ArrowRight, Activity, BarChart3, MessageSquare, Settings, ChevronDown, ChevronUp, GripVertical, Shield, ListTodo, Bell, Sparkles, PlayCircle, Edit3, Link2, Info, Table, LayoutGrid, UserPlus, Star, Rocket, Flame, Code, GitBranch, Percent, RefreshCw, Archive, Lock } from 'lucide-react';
 import { Badge } from '../components/ui/badge';
@@ -9,17 +9,367 @@ import { projects, globalGamification, globalNotifications, type GlobalNotificat
 import type { Ticket } from '../data/mockData';
 import { useAuth } from '../contexts/AuthContext';
 import { TicketDetailModal } from '../components/TicketDetailModal';
+import { authFetch } from '../../services/api';
+interface BackendProject {
+  id: string;
+  name: string;
+  code: string;
+  description: string | null;
+  status: 'ACTIVE' | 'ON_HOLD' | 'COMPLETED' | 'ARCHIVED';
+  riskLevel: 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
+  startDate: string;
+  targetEndDate: string;
+  actualEndDate: string | null;
+  budget: number | null;
+  createdAt: string;
+  updatedAt: string;
+  pm: {
+    id: string;
+    fullName: string;
+    email: string;
+    role: string;
+  } | null;
+  createdBy: {
+    id: string;
+    fullName: string;
+    email: string;
+    role: string;
+  };
+  members: Array<{
+    id: string;
+    fullName: string;
+    email: string;
+    role: string;
+    avatarUrl: string | null;
+  }>;
+  stats: {
+    membersCount: number;
+    sprintsCount: number;
+    ticketsCount: number;
+  };
+}
+
+const formatBackendStatus = (status?: BackendProject['status']) => {
+  switch (status) {
+    case 'ACTIVE':
+      return 'Active';
+    case 'ON_HOLD':
+      return 'On Hold';
+    case 'COMPLETED':
+      return 'Completed';
+    case 'ARCHIVED':
+      return 'Archived';
+    default:
+      return 'N/A';
+  }
+};
+
+const formatBackendRisk = (risk?: BackendProject['riskLevel']) => {
+  switch (risk) {
+    case 'LOW':
+      return 'Low';
+    case 'MEDIUM':
+      return 'Medium';
+    case 'HIGH':
+      return 'High';
+    case 'CRITICAL':
+      return 'High';
+    default:
+      return 'N/A';
+  }
+};
+
+const formatDateLabel = (value?: string | null) => {
+  if (!value) return 'N/A';
+
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return 'N/A';
+
+  return date.toLocaleDateString('es-MX', {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+  });
+};
+
+const formatMoneyLabel = (value?: number | null) => {
+  if (value === null || value === undefined) return 'N/A';
+
+  return new Intl.NumberFormat('es-MX', {
+    style: 'currency',
+    currency: 'MXN',
+    maximumFractionDigits: 2,
+  }).format(value);
+};
+
+const safeText = (value?: string | null) => {
+  if (!value || !String(value).trim()) return 'N/A';
+  return value;
+};
 export function ProjectDetail() {
-  const {
-    id
-  } = useParams();
-  const navigate = useNavigate();
-  const {
-    user,
-    theme
-  } = useAuth();
-  const role = user?.role || 'DEVELOPER';
-  const project = projects.find(p => p.id === id) || projects[0];
+const {
+  id
+} = useParams();
+const navigate = useNavigate();
+const {
+  user,
+  theme
+} = useAuth();
+const role = user?.role || 'DEVELOPER';
+
+const [backendProjects, setBackendProjects] = useState<BackendProject[]>([]);
+const [isLoadingProject, setIsLoadingProject] = useState(true);
+const [projectLoadError, setProjectLoadError] = useState('');
+
+useEffect(() => {
+  const loadProjects = async () => {
+    try {
+      setIsLoadingProject(true);
+      setProjectLoadError('');
+
+      const data = await authFetch<{ projects: BackendProject[] }>('/projects');
+      setBackendProjects(data.projects || []);
+    } catch (err: any) {
+      setProjectLoadError(err.message || 'No se pudo cargar el detalle real del proyecto');
+    } finally {
+      setIsLoadingProject(false);
+    }
+  };
+
+  loadProjects();
+}, []);
+
+const mockProject = projects.find(p => p.id === id) || projects[0];
+const backendProject = backendProjects.find(p => p.id === id) || null;
+
+const project = useMemo(() => {
+  const mapTeamFromMembers = (members?: BackendProject['members']) => {
+    if (!members || members.length === 0) return [];
+
+    return members.map((m) => ({
+      id: m.id,
+      name: m.fullName || 'N/A',
+      role: m.role || 'N/A',
+      email: m.email || 'N/A',
+      avatar:
+        m.fullName
+          ?.split(' ')
+          .filter(Boolean)
+          .map((part) => part[0])
+          .join('')
+          .slice(0, 2)
+          .toUpperCase() || 'NA',
+      tasksAssigned: 0,
+      performance: 0,
+      status: 'N/A',
+    }));
+  };
+
+  if (!mockProject && !backendProject) return null;
+
+  if (!mockProject && backendProject) {
+    return {
+      id: backendProject.id,
+      name: safeText(backendProject.name),
+      code: safeText(backendProject.code),
+      description: safeText(backendProject.description),
+
+      status: formatBackendStatus(backendProject.status),
+      risk: formatBackendRisk(backendProject.riskLevel),
+
+      startDate: backendProject.startDate ?? null,
+      targetEndDate: backendProject.targetEndDate ?? null,
+      actualEndDate: backendProject.actualEndDate ?? null,
+
+      startDateLabel: formatDateLabel(backendProject.startDate),
+      targetEndDateLabel: formatDateLabel(backendProject.targetEndDate),
+      actualEndDateLabel: formatDateLabel(backendProject.actualEndDate),
+
+      budget: backendProject.budget ?? null,
+      budgetLabel: formatMoneyLabel(backendProject.budget),
+
+      pm: backendProject.pm
+        ? {
+            name: backendProject.pm.fullName,
+            email: backendProject.pm.email,
+            role: backendProject.pm.role,
+          }
+        : {
+            name: 'N/A',
+            email: 'N/A',
+            role: 'N/A',
+          },
+
+      createdBy: backendProject.createdBy
+        ? {
+            name: backendProject.createdBy.fullName,
+            email: backendProject.createdBy.email,
+            role: backendProject.createdBy.role,
+          }
+        : {
+            name: 'N/A',
+            email: 'N/A',
+            role: 'N/A',
+          },
+
+      pmName: backendProject.pm?.fullName || 'N/A',
+      pmEmail: backendProject.pm?.email || 'N/A',
+      createdByName: backendProject.createdBy?.fullName || 'N/A',
+      createdByEmail: backendProject.createdBy?.email || 'N/A',
+
+      members: backendProject.members ?? [],
+      developers: (backendProject.members ?? []).map((m) => ({
+        name: m.fullName,
+        role: m.role,
+        email: m.email,
+        avatar: m.avatarUrl,
+        completedTickets: 'N/A',
+        velocity: 'N/A',
+        workload: 'N/A',
+      })),
+
+      team: mapTeamFromMembers(backendProject.members),
+      teamMembersLabel: backendProject.members.length
+        ? backendProject.members.map((m) => m.fullName).join(', ')
+        : 'N/A',
+      teamSize: backendProject.stats?.membersCount ?? 0,
+
+      stats: backendProject.stats ?? {
+        membersCount: 0,
+        sprintsCount: 0,
+        ticketsCount: 0,
+      },
+
+      sprintsCountLabel: backendProject.stats?.sprintsCount ?? 'N/A',
+      ticketsCountLabel: backendProject.stats?.ticketsCount ?? 'N/A',
+
+      progress: 0,
+      progressLabel: 'N/A',
+      scheduleVariance: 0,
+      spi: 0,
+      delayedMilestones: 'N/A',
+      blockedTickets: 'N/A',
+      teamVelocity: 'N/A',
+      openRisks: 'N/A',
+
+      sprints: [],
+      tickets: [],
+      notifications: [],
+      progressHistory: [{ date: 'Real', planned: 0, actual: 0 }],
+
+      closedDate: backendProject.actualEndDate
+        ? new Date(backendProject.actualEndDate).toISOString().split('T')[0]
+        : 'N/A',
+      closedBy: 'N/A',
+    };
+  }
+
+  return {
+    ...mockProject,
+
+    id: backendProject?.id ?? mockProject.id,
+    name: backendProject?.name ?? mockProject.name,
+    code: safeText(backendProject?.code),
+    description: safeText(backendProject?.description),
+
+    status: formatBackendStatus(backendProject?.status),
+    risk: formatBackendRisk(backendProject?.riskLevel),
+
+    startDate: backendProject?.startDate ?? null,
+    targetEndDate: backendProject?.targetEndDate ?? null,
+    actualEndDate: backendProject?.actualEndDate ?? null,
+
+    startDateLabel: formatDateLabel(backendProject?.startDate),
+    targetEndDateLabel: formatDateLabel(backendProject?.targetEndDate),
+    actualEndDateLabel: formatDateLabel(backendProject?.actualEndDate),
+
+    budget: backendProject?.budget ?? null,
+    budgetLabel: formatMoneyLabel(backendProject?.budget),
+
+    pm: backendProject?.pm
+      ? {
+          name: backendProject.pm.fullName,
+          email: backendProject.pm.email,
+          role: backendProject.pm.role,
+        }
+      : {
+          name: 'N/A',
+          email: 'N/A',
+          role: 'N/A',
+        },
+
+    createdBy: backendProject?.createdBy
+      ? {
+          name: backendProject.createdBy.fullName,
+          email: backendProject.createdBy.email,
+          role: backendProject.createdBy.role,
+        }
+      : {
+          name: 'N/A',
+          email: 'N/A',
+          role: 'N/A',
+        },
+
+    pmName: backendProject?.pm?.fullName || 'N/A',
+    pmEmail: backendProject?.pm?.email || 'N/A',
+    createdByName: backendProject?.createdBy?.fullName || 'N/A',
+    createdByEmail: backendProject?.createdBy?.email || 'N/A',
+
+    members: backendProject?.members ?? [],
+    developers: backendProject?.members?.length
+      ? backendProject.members.map((m) => ({
+          name: m.fullName,
+          role: m.role,
+          email: m.email,
+          avatar: m.avatarUrl,
+          completedTickets: 'N/A',
+          velocity: 'N/A',
+          workload: 'N/A',
+        }))
+      : [],
+
+    team: backendProject?.members?.length
+      ? mapTeamFromMembers(backendProject.members)
+      : Array.isArray(mockProject.team)
+      ? mockProject.team
+      : [],
+
+    teamMembersLabel: backendProject?.members?.length
+      ? backendProject.members.map((m) => m.fullName).join(', ')
+      : 'N/A',
+
+    teamSize: backendProject?.stats?.membersCount ?? mockProject.team?.length ?? 0,
+
+    stats: backendProject?.stats ?? {
+      membersCount: mockProject.team?.length ?? 0,
+      sprintsCount: 0,
+      ticketsCount: 0,
+    },
+
+    sprintsCountLabel: backendProject?.stats?.sprintsCount ?? 'N/A',
+    ticketsCountLabel: backendProject?.stats?.ticketsCount ?? 'N/A',
+
+    progress: 0,
+    progressLabel: 'N/A',
+    scheduleVariance: 0,
+    spi: 0,
+    delayedMilestones: 'N/A',
+    blockedTickets: 'N/A',
+    teamVelocity: 'N/A',
+    openRisks: 'N/A',
+
+    sprints: [],
+    tickets: [],
+    notifications: [],
+    progressHistory: [{ date: 'Real', planned: 0, actual: 0 }],
+
+    closedDate: backendProject?.actualEndDate
+      ? new Date(backendProject.actualEndDate).toISOString().split('T')[0]
+      : 'N/A',
+    closedBy: 'N/A',
+  };
+}, [mockProject, backendProject]);
+
   const [showProgressModal, setShowProgressModal] = useState(false);
   const [showSprintModal, setShowSprintModal] = useState(false);
   const [showTicketModal, setShowTicketModal] = useState(false);
@@ -382,6 +732,26 @@ export function ProjectDetail() {
     Medium: 'bg-yellow-500/10 text-yellow-500 border-yellow-500/20',
     Low: 'bg-blue-500/10 text-blue-500 border-blue-500/20'
   };
+  if (isLoadingProject || !project) {
+  return (
+    <div className="min-h-screen bg-[#0F0F0F] flex items-center justify-center">
+      <p className="text-[#8E8E93]">Cargando detalle del proyecto...</p>
+    </div>
+  );
+}
+
+if (projectLoadError && !backendProject) {
+  return (
+    <div className="min-h-screen bg-[#0F0F0F] flex items-center justify-center px-6">
+      <div className="max-w-md text-center">
+        <p className="text-red-400 mb-3">{projectLoadError}</p>
+        <p className="text-[#8E8E93] text-sm">
+          No pude cargar el detalle real, así que no conviene mostrar datos inventados.
+        </p>
+      </div>
+    </div>
+  );
+}
   const handleCloseProject = () => {
     console.log('Cerrando proyecto:', project.name);
     project.status = 'Archived';
@@ -605,7 +975,7 @@ export function ProjectDetail() {
                     </div>
                     {project.progress > 60 ? <TrendingUp className="w-4 h-4 text-green-500" /> : <TrendingDown className="w-4 h-4 text-[#FF3B30]" />}
                   </div>
-                  <p className="text-3xl font-bold text-white mb-1">{project.progress}%</p>
+<p className="text-3xl font-bold text-white mb-1">{project.progressLabel}</p>
                   <p className="text-sm text-[#8E8E93]">% Avance</p>
                 </div>
 
@@ -617,7 +987,7 @@ export function ProjectDetail() {
                     </div>
                     {project.scheduleVariance >= 0 ? <TrendingUp className="w-4 h-4 text-green-500" /> : <TrendingDown className="w-4 h-4 text-[#FF3B30]" />}
                   </div>
-                  <p className="text-3xl font-bold text-white mb-1">{project.scheduleVariance}%</p>
+                  <p className="text-3xl font-bold text-white mb-1">N/A</p>
                   <p className="text-sm text-[#8E8E93]">Schedule Variance</p>
                 </div>
 
@@ -629,7 +999,7 @@ export function ProjectDetail() {
                     </div>
                     {project.spi >= 1 ? <TrendingUp className="w-4 h-4 text-green-500" /> : <TrendingDown className="w-4 h-4 text-[#FF3B30]" />}
                   </div>
-                  <p className="text-3xl font-bold text-white mb-1">{project.spi.toFixed(2)}</p>
+                <p className="text-3xl font-bold text-white mb-1">N/A</p>
                   <p className="text-sm text-[#8E8E93]">SPI</p>
                 </div>
 
@@ -791,8 +1161,9 @@ export function ProjectDetail() {
                 </div>
                 <div>
                   <p className="text-2xl font-bold text-white">
-                    {Math.round(project.team.reduce((sum, m) => sum + m.performance, 0) / project.team.length)}%
-                  </p>
+{project.team.length > 0
+  ? `${Math.round(project.team.reduce((sum, m) => sum + m.performance, 0) / project.team.length)}%`
+  : 'N/A'}                  </p>
                   <p className="text-xs text-[#8E8E93]">Performance Prom.</p>
                 </div>
               </div>
@@ -2273,9 +2644,19 @@ export function ProjectDetail() {
                     </div>
                     <div className="flex items-center justify-between">
                       <span className="text-[#8E8E93]">Riesgo</span>
-                      <Badge variant={project.risk === 'High' ? 'danger' : project.risk === 'Medium' ? 'default' : 'default'}>
-                        {project.risk}
-                      </Badge>
+<Badge
+  className={`text-xs border ${
+    !project.risk
+      ? 'bg-gray-500/10 text-gray-400 border-gray-500/20'
+      : project.risk === 'HIGH' || project.risk === 'CRITICAL'
+      ? 'bg-[#FF3B30]/10 text-[#FF3B30] border-[#FF3B30]/20'
+      : project.risk === 'MEDIUM'
+      ? 'bg-yellow-500/10 text-yellow-500 border-yellow-500/20'
+      : 'bg-green-500/10 text-green-500 border-green-500/20'
+  }`}
+>
+  {project.risk || 'N/A'}
+</Badge>
                     </div>
                   </div>
                 </div>

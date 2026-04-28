@@ -1,3 +1,5 @@
+// LOGICAAAAWR
+
 const prisma = require("../config/prisma");
 const { hashPassword } = require("../utils/password");
 const { generateOtp, hashOtp, getOtpExpiration } = require("../utils/otp");

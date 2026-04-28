@@ -1,3 +1,6 @@
+
+// controllersss !! recibir request -> validar -> serviceee!
+
 const { createUserByAdmin } = require("../services/admin.service");
 
 async function createUser(req, res) {

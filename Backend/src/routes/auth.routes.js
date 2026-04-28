@@ -9,7 +9,7 @@ const {
 
 router.post("/login", loginController);
 router.post("/verify-otp", verifyOtpController);
-router.post("/set-new-password", setNewPasswordController);
+router.post("/set-password", setNewPasswordController);
 router.post("/logout", logoutController);
 
 module.exports = router;
