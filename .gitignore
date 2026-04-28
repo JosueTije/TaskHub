@@ -4,3 +4,7 @@ BackEnd/node_modules/
 .env
 dist/
 build/
+FrontEnd/node_modules/
+src/generated/prisma/
+Backend/.env
+.DS_Store
