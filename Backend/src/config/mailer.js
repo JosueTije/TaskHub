@@ -18,17 +18,18 @@ async function sendOtpEmail({ to, fullName, otp }) {
     appName: "TaskHub",
   };
 
-  const result = await emailjs.send(
-    process.env.EMAILJS_SERVICE_ID,
-    process.env.EMAILJS_TEMPLATE_ID,
-    templateParams,
-    {
-      publicKey: process.env.EMAILJS_PUBLIC_KEY,
-    }
-  );
+const result = await emailjs.send(
+  process.env.EMAILJS_SERVICE_ID,
+  process.env.EMAILJS_TEMPLATE_ID,
+  templateParams,
+  {
+    publicKey: process.env.EMAILJS_PUBLIC_KEY,
+  }
+);
 
-  console.log("EmailJS result:", result);
-  return result;
+console.log("EmailJS result:", result);
+return result;
+
 }
 
 module.exports = { sendOtpEmail };

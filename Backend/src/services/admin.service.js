@@ -59,7 +59,7 @@ sendOtpEmail({
   fullName,
   otp,
 }).catch((error) => {
-  console.error("Error enviando OTP:", error.message);
+  console.error("Error enviando OTP completo:", error);
 });
 
   console.log("OTP generado:", otp);
