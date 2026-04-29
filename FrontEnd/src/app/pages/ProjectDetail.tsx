@@ -870,7 +870,6 @@ const handleCompleteSprint = async () => {
 const handleTicketUpdate = async (ticketId: string, updates: any) => {
   try {
     const priorityMap: any = {
-      Critical: "CRITICAL",
       High: "HIGH",
       Medium: "MEDIUM",
       Low: "LOW",
@@ -885,38 +884,35 @@ const handleTicketUpdate = async (ticketId: string, updates: any) => {
       Cancelled: "CANCELLED",
     };
 
-    const isManager = role === "PM" || role === "ADMIN";
+    let updatedTicketResponse;
 
-    const updateBody: any = isManager
-      ? {
+    if (user.role === "ADMIN" || user.role === "PM") {
+      await authFetch(`/tickets/${ticketId}`, {
+        method: "PUT",
+        body: JSON.stringify({
           title: updates.title,
           description: updates.description,
           priority: priorityMap[updates.priority],
           storyPoints: updates.estimation,
           startDate: updates.startDate,
           dueDate: updates.dueDate,
+          estimatedHours: updates.estimatedHours ?? updates.estimation,
           actualHours: updates.actualHours,
-          estimatedHours: updates.estimatedHours,
-        }
-      : {
-          actualHours: updates.actualHours,
-        };
+        }),
+      });
+    }
 
-    await authFetch(`/tickets/${ticketId}`, {
-      method: "PUT",
-      body: JSON.stringify(updateBody),
-    });
-
-    const statusResponse = await authFetch(`/tickets/${ticketId}/status`, {
+    updatedTicketResponse = await authFetch(`/tickets/${ticketId}/status`, {
       method: "PATCH",
       body: JSON.stringify({
         status: statusMap[updates.status],
+        actualHours: updates.actualHours,
       }),
     });
 
     setRealTickets((prev) =>
       prev.map((ticket) =>
-        ticket.id === ticketId ? statusResponse.ticket : ticket
+        ticket.id === ticketId ? updatedTicketResponse.ticket : ticket
       )
     );
 
