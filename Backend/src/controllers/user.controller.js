@@ -107,4 +107,5 @@ const addProjectMember = async (req, res) => {
 
 module.exports = {
   getUsersController,
+  getDevelopers
 };
