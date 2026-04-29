@@ -176,3 +176,21 @@ enum PriorityLevel {
   HIGH
   CRITICAL
 }
+
+model Sprint {
+  id             String   @id @default(cuid())
+  name           String
+  goal           String?
+  startDate      DateTime
+  endDate        DateTime
+  status         SprintStatus @default(PLANNED)
+
+  plannedPoints  Int      @default(0)
+  completedPoints Int     @default(0)
+
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  projectId      String
+  project        Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+}
