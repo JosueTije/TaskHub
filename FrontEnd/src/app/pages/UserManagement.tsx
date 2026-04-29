@@ -304,43 +304,58 @@ function CreateUserModal({
   });
   const [isLoading, setIsLoading] = useState(false);
   const [generatedPassword, setGeneratedPassword] = useState('');
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setIsLoading(true);
-    try {
-      const response = await fetch(`${import.meta.env.VITE_API_URL}/admin/users`, {
-        method: "POST",
-        credentials: "include",
-        headers: {
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify({
-          fullName: formData.name,
-          email: formData.email,
-          role: formData.role,
-          temporaryPassword: formData.temporaryPassword
-        })
-      });
-      const data = await response.json();
-      if (!response.ok) {
-        throw new Error(data.message || "Error al crear usuario");
-      }
-      setGeneratedPassword(formData.temporaryPassword);
-      onCreate({
-        id: data.user.id,
-        name: data.user.fullName,
-        email: data.user.email,
-        role: data.user.role,
-        avatar: "👤",
-        isActive: data.user.status === "ACTIVE",
-        needsPasswordReset: true
-      });
-    } catch (error: any) {
-      alert(error.message || "No se pudo crear el usuario");
-    } finally {
-      setIsLoading(false);
+const handleSubmit = async (e: React.FormEvent) => {
+  e.preventDefault();
+  setIsLoading(true);
+
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 10000);
+
+  try {
+    const response = await fetch(`${import.meta.env.VITE_API_URL}/admin/users`, {
+      method: "POST",
+      credentials: "include",
+      signal: controller.signal,
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        fullName: formData.name.trim(),
+        email: formData.email.trim(),
+        role: formData.role,
+        temporaryPassword: formData.temporaryPassword.trim(),
+      }),
+    });
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      throw new Error(data.message || "Error al crear usuario");
     }
-  };
+
+    onCreate({
+      id: data.user.id,
+      name: data.user.fullName,
+      email: data.user.email,
+      role: data.user.role,
+      avatar: "👤",
+      isActive: data.user.status === "ACTIVE",
+      needsPasswordReset: true,
+    });
+
+    alert("Usuario creado correctamente");
+    handleClose();
+  } catch (error: any) {
+    if (error.name === "AbortError") {
+      alert("La petición tardó demasiado. Revisa si el usuario se creó y vuelve a intentar.");
+    } else {
+      alert(error.message || "No se pudo crear el usuario");
+    }
+  } finally {
+    clearTimeout(timeoutId);
+    setIsLoading(false);
+  }
+};
   const handleClose = () => {
     setFormData({
       name: '',
@@ -466,43 +481,27 @@ function EditUserModal({
     role: 'DEVELOPER' as UserRole,
     temporaryPassword: ''
   });
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setIsLoading(true);
-    try {
-      const response = await fetch(`${import.meta.env.VITE_API_URL}/admin/users`, {
-        method: "POST",
-        credentials: "include",
-        headers: {
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify({
-          fullName: formData.name,
-          email: formData.email,
-          role: formData.role,
-          temporaryPassword: formData.temporaryPassword
-        })
-      });
-      const data = await response.json();
-      if (!response.ok) {
-        throw new Error(data.message || "Error al crear usuario");
-      }
-      setGeneratedPassword(formData.temporaryPassword);
-      onCreate({
-        id: data.user.id,
-        name: data.user.fullName,
-        email: data.user.email,
-        role: data.user.role,
-        avatar: "👤",
-        isActive: data.user.status === "ACTIVE",
-        needsPasswordReset: true
-      });
-    } catch (error: any) {
-      alert(error.message || "No se pudo crear el usuario");
-    } finally {
-      setIsLoading(false);
-    }
-  };
+React.useEffect(() => {
+  if (user) {
+    setFormData({
+      name: user.name,
+      email: user.email,
+      role: user.role,
+      temporaryPassword: "",
+    });
+  }
+}, [user]);
+const handleSubmit = (e: React.FormEvent) => {
+  e.preventDefault();
+
+  onUpdate(user.id, {
+    name: formData.name,
+    email: formData.email,
+    role: formData.role,
+  });
+
+  onClose();
+};
   if (!isOpen) return null;
   return <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
       <motion.div initial={{

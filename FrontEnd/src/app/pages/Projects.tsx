@@ -73,6 +73,15 @@ export function Projects() {
   const [isLoadingUsers, setIsLoadingUsers] = useState(false);
   const [isCreatingProject, setIsCreatingProject] = useState(false);
   const [projectError, setProjectError] = useState('');
+  const [isCreatingUser, setIsCreatingUser] = useState(false);
+const [userError, setUserError] = useState('');
+
+const [userForm, setUserForm] = useState({
+  fullName: '',
+  email: '',
+  role: 'DEVELOPER',
+  temporaryPassword: '',
+});
   const [backendProjects, setBackendProjects] = useState<BackendProject[]>([]);
   const [isLoadingProjects, setIsLoadingProjects] = useState(true);
   const [projectsError, setProjectsError] = useState('');
@@ -105,19 +114,21 @@ export function Projects() {
   useEffect(() => {
     loadProjects();
   }, []);
-  useEffect(() => {
-  const loadUsers = async () => {
-    try {
-      setIsLoadingUsers(true);
-      const data = await authFetch<{ users: BackendUser[] }>('/users');
-      setBackendUsers(data.users);
-    } catch (err: any) {
-      console.error('No se pudieron cargar los usuarios:', err.message);
-    } finally {
-      setIsLoadingUsers(false);
-    }
-  };
 
+
+const loadUsers = async () => {
+  try {
+    setIsLoadingUsers(true);
+    const data = await authFetch<{ users: BackendUser[] }>('/users');
+    setBackendUsers(data.users);
+  } catch (err: any) {
+    console.error('No se pudieron cargar los usuarios:', err.message);
+  } finally {
+    setIsLoadingUsers(false);
+  }
+};
+
+useEffect(() => {
   loadUsers();
 }, []);
 
@@ -219,70 +230,82 @@ export function Projects() {
     }
   };
 
-  const handleCreateProjectSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+const handleCreateUserSubmit = async (e: React.FormEvent) => {
+  e.preventDefault();
 
-    try {
-      setProjectError('');
+  try {
+    setUserError('');
 
-      if (!projectForm.name.trim()) {
-        setProjectError('El nombre del proyecto es obligatorio');
-        return;
-      }
-
-      if (!projectForm.code.trim()) {
-        setProjectError('El código del proyecto es obligatorio');
-        return;
-      }
-
-      if (!projectForm.pmId) {
-        setProjectError('Debes seleccionar un Project Manager');
-        return;
-      }
-
-      if (!projectForm.startDate || !projectForm.targetEndDate) {
-        setProjectError('Debes seleccionar fecha de inicio y fin');
-        return;
-      }
-
-      setIsCreatingProject(true);
-
-      const data = await authFetch<CreateProjectResponse>('/projects', {
-        method: 'POST',
-        body: JSON.stringify({
-          name: projectForm.name.trim(),
-          code: projectForm.code.trim(),
-          description: projectForm.description.trim() || null,
-          pmId: projectForm.pmId,
-          riskLevel: projectForm.riskLevel,
-          startDate: projectForm.startDate,
-          targetEndDate: projectForm.targetEndDate,
-          budget: projectForm.budget ? Number(projectForm.budget) : null,
-          memberIds: [],
-        }),
-      });
-
-      alert('Proyecto creado correctamente');
-
-      setShowCreateProjectModal(false);
-      setProjectForm({
-        name: '',
-        code: '',
-        description: '',
-        pmId: '',
-        startDate: '',
-        targetEndDate: '',
-        budget: '',
-        riskLevel: 'LOW',
-      });
-      await loadProjects();
-      navigate(`/project/${data.project.id}`);
-    } catch (err: any) {
-      setProjectError(err.message || 'No se pudo crear el proyecto');
-    } finally {
-      setIsCreatingProject(false);
+    if (!userForm.fullName.trim()) {
+      setUserError('El nombre completo es obligatorio');
+      return;
     }
-  };
+
+    if (!userForm.email.trim()) {
+      setUserError('El email es obligatorio');
+      return;
+    }
+
+    if (!userForm.role) {
+      setUserError('Debes seleccionar un rol');
+      return;
+    }
+
+    if (!userForm.temporaryPassword.trim()) {
+      setUserError('La contraseña temporal es obligatoria');
+      return;
+    }
+
+    setIsCreatingUser(true);
+
+const controller = new AbortController();
+const timeoutId = setTimeout(() => controller.abort(), 8000);
+
+try {
+  await authFetch('/admin/users', {
+    method: 'POST',
+    signal: controller.signal,
+    body: JSON.stringify({
+      fullName: userForm.fullName.trim(),
+      email: userForm.email.trim(),
+      role: userForm.role,
+      temporaryPassword: userForm.temporaryPassword.trim(),
+    }),
+  });
+
+  alert('Usuario creado correctamente');
+  setShowCreateUserModal(false);
+
+  setUserForm({
+    fullName: '',
+    email: '',
+    role: 'DEVELOPER',
+    temporaryPassword: '',
+  });
+
+  await loadUsers();
+} finally {
+  clearTimeout(timeoutId);
+}
+
+    alert('Usuario creado correctamente');
+
+    setShowCreateUserModal(false);
+
+    setUserForm({
+      fullName: '',
+      email: '',
+      role: 'DEVELOPER',
+      temporaryPassword: '',
+    });
+
+    await loadUsers();
+  } catch (err: any) {
+    setUserError(err.message || 'No se pudo crear el usuario');
+  } finally {
+    setIsCreatingUser(false);
+  }
+};
 
   return (
     <div className={`min-h-screen ${colors.bg}`}>
@@ -1078,53 +1101,63 @@ export function Projects() {
                   </motion.button>
                 </div>
 
-                <form className="p-6 space-y-6">
+                <form className="p-6 space-y-6" onSubmit={handleCreateUserSubmit}>
                   <div>
                     <label className={`block text-sm font-medium ${colors.textPrimary} mb-2`}>Nombre Completo *</label>
-                    <input
-                      type="text"
-                      placeholder="Juan Pérez"
-                      className={`w-full px-4 py-3 ${colors.bgTertiary} border ${colors.border} rounded-xl ${colors.textPrimary} placeholder:${colors.textSecondary} outline-none transition-all text-sm`}
-                    />
+<input
+  type="text"
+  value={userForm.fullName}
+  onChange={(e) => setUserForm({ ...userForm, fullName: e.target.value })}
+  placeholder="Juan Pérez"
+  className={`w-full px-4 py-3 ${colors.bgTertiary} border ${colors.border} rounded-xl ${colors.textPrimary} placeholder:${colors.textSecondary} outline-none transition-all text-sm`}
+/>
                   </div>
 
                   <div>
                     <label className={`block text-sm font-medium ${colors.textPrimary} mb-2`}>Email Corporativo *</label>
-                    <input
-                      type="email"
-                      placeholder="juan.perez@empresa.com"
-                      className={`w-full px-4 py-3 ${colors.bgTertiary} border ${colors.border} rounded-xl ${colors.textPrimary} placeholder:${colors.textSecondary} outline-none transition-all text-sm`}
-                    />
+<input
+  type="email"
+  value={userForm.email}
+  onChange={(e) => setUserForm({ ...userForm, email: e.target.value })}
+  placeholder="juan.perez@empresa.com"
+  className={`w-full px-4 py-3 ${colors.bgTertiary} border ${colors.border} rounded-xl ${colors.textPrimary} placeholder:${colors.textSecondary} outline-none transition-all text-sm`}
+/>
                   </div>
 
                   <div>
                     <label className={`block text-sm font-medium ${colors.textPrimary} mb-2`}>Rol en la Plataforma *</label>
-                    <select
-                      className={`w-full px-4 py-3 ${colors.bgTertiary} border ${colors.border} rounded-xl ${colors.textPrimary} outline-none transition-all text-sm`}
-                    >
-                      <option value="">Seleccionar rol...</option>
-                      <option value="PM">Project Manager (PM)</option>
-                      <option value="DEVELOPER">Developer</option>
-                    </select>
+<select
+  value={userForm.role}
+  onChange={(e) => setUserForm({ ...userForm, role: e.target.value })}
+  className={`w-full px-4 py-3 ${colors.bgTertiary} border ${colors.border} rounded-xl ${colors.textPrimary} outline-none transition-all text-sm`}
+>
+  <option value="PM">Project Manager (PM)</option>
+  <option value="DEVELOPER">Developer</option>
+</select>
                     <p className={`text-xs ${colors.textSecondary} mt-2`}>
                       PM: Acceso completo a proyectos asignados, métricas e IA<br />
                       Developer: Acceso limitado a sus proyectos, gamificación personal
                     </p>
                   </div>
 
-                  <div>
-                    <label className={`block text-sm font-medium ${colors.textPrimary} mb-2`}>Departamento</label>
-                    <select
-                      className={`w-full px-4 py-3 ${colors.bgTertiary} border ${colors.border} rounded-xl ${colors.textPrimary} outline-none transition-all text-sm`}
-                    >
-                      <option value="">Seleccionar departamento...</option>
-                      <option value="engineering">Engineering</option>
-                      <option value="product">Product</option>
-                      <option value="design">Design</option>
-                      <option value="qa">QA</option>
-                      <option value="devops">DevOps</option>
-                    </select>
-                  </div>
+<div>
+  <label className={`block text-sm font-medium ${colors.textPrimary} mb-2`}>
+    Contraseña Temporal *
+  </label>
+  <input
+    type="password"
+    value={userForm.temporaryPassword}
+    onChange={(e) => setUserForm({ ...userForm, temporaryPassword: e.target.value })}
+    placeholder="Temp123!"
+    className={`w-full px-4 py-3 ${colors.bgTertiary} border ${colors.border} rounded-xl ${colors.textPrimary} placeholder:${colors.textSecondary} outline-none transition-all text-sm`}
+  />
+</div>
+{userError && (
+  <div className="flex items-center gap-2 p-3 bg-[#E31837]/10 border border-[#E31837]/20 rounded-xl">
+    <AlertTriangle className="w-4 h-4 text-[#E31837] flex-shrink-0" />
+    <p className="text-sm text-[#E31837]">{userError}</p>
+  </div>
+)}
 
                   <div className={`flex items-center justify-end gap-3 pt-4 border-t ${colors.border}`}>
                     <motion.button
@@ -1136,15 +1169,16 @@ export function Projects() {
                     >
                       Cancelar
                     </motion.button>
-                    <motion.button
-                      type="submit"
-                      className="px-6 py-3 rounded-xl text-white transition-all text-sm font-medium"
-                      style={{ backgroundColor: colors.accent }}
-                      whileHover={{ scale: 1.02, backgroundColor: colors.accentHover }}
-                      whileTap={{ scale: 0.98 }}
-                    >
-                      Crear Usuario
-                    </motion.button>
+<motion.button
+  type="submit"
+  disabled={isCreatingUser}
+  className="px-6 py-3 rounded-xl text-white transition-all text-sm font-medium disabled:opacity-60"
+  style={{ backgroundColor: colors.accent }}
+  whileHover={{ scale: isCreatingUser ? 1 : 1.02, backgroundColor: colors.accentHover }}
+  whileTap={{ scale: isCreatingUser ? 1 : 0.98 }}
+>
+  {isCreatingUser ? 'Creando...' : 'Crear Usuario'}
+</motion.button>
                   </div>
                 </form>
               </motion.div>

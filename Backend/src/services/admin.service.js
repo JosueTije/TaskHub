@@ -54,11 +54,13 @@ async function createUserByAdmin({ email, fullName, role, temporaryPassword }) {
     return createdUser;
   });
 
-  await sendOtpEmail({
-    to: email,
-    fullName,
-    otp,
-  });
+sendOtpEmail({
+  to: email,
+  fullName,
+  otp,
+}).catch((error) => {
+  console.error("Error enviando OTP:", error.message);
+});
 
   console.log("OTP generado:", otp);
 
