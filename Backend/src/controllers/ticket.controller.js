@@ -94,11 +94,12 @@ async function updateTicketController(req, res) {
 async function updateTicketStatusController(req, res) {
   try {
     const { id } = req.params;
-    const { status } = req.body;
+    const { status, actualHours } = req.body;
 
     const ticket = await updateTicketStatus({
       ticketId: id,
       status,
+      actualHours,
       userId: req.user.sub,
       role: req.user.role,
     });
