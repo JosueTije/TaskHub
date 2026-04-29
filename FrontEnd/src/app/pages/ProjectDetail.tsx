@@ -545,21 +545,31 @@ tickets: realTickets.map(mapBackendTicketToUi),
   const activeSprint = project.sprints.find(s => s.status === 'Active');
   const [sprintFilter, setSprintFilter] = useState<string | 'all'>(activeSprint?.id || 'all');
 
-  useEffect(() => {
-  if (sprintFilter === "all") return;
-  if (!sprintFilter) return;
+useEffect(() => {
+  if (!realSprints.length) return;
 
   const loadTickets = async () => {
     try {
-      const data = await authFetch(`/tickets/sprint/${sprintFilter}`);
-      setRealTickets(data.tickets || []);
+      if (sprintFilter === "all") {
+        const responses = await Promise.all(
+          realSprints.map((sprint) =>
+            authFetch(`/tickets/sprint/${sprint.id}`)
+          )
+        );
+
+        const allTickets = responses.flatMap((res) => res.tickets || []);
+        setRealTickets(allTickets);
+      } else {
+        const data = await authFetch(`/tickets/sprint/${sprintFilter}`);
+        setRealTickets(data.tickets || []);
+      }
     } catch (error) {
       console.error(error);
     }
   };
 
   loadTickets();
-}, [sprintFilter]);
+}, [sprintFilter, realSprints]);
   const [ticketsView, setTicketsView] = useState<'table' | 'kanban'>('table');
   const [showMyTicketsOnly, setShowMyTicketsOnly] = useState(false);
   const sprintsGantt = [{
@@ -672,23 +682,48 @@ const handleCreateSprint = async () => {
 };
 const handleCreateTicket = async () => {
   try {
-    await authFetch(`/tickets/sprint/${ticketData.sprintId}`, {
+    const priorityMap: any = {
+      High: "HIGH",
+      Medium: "MEDIUM",
+      Low: "LOW",
+    };
+
+    const statusMap: any = {
+      Backlog: "TODO",
+      "In Progress": "IN_PROGRESS",
+      Review: "IN_REVIEW",
+      Blocked: "BLOCKED",
+      Done: "DONE",
+    };
+
+    const response = await authFetch(`/tickets/sprint/${ticketData.sprintId}`, {
       method: "POST",
       body: JSON.stringify({
         title: ticketData.title,
         description: ticketData.description,
-        priority: ticketData.priority,
+        priority: priorityMap[ticketData.priority] || "MEDIUM",
+        status: statusMap[ticketData.status] || "TODO",
+        storyPoints: Number(ticketData.estimation),
         estimatedHours: Number(ticketData.estimation),
-        assignedToId: ticketData.assignee || null
-      })
+        assignedToId: ticketData.assignee || null,
+      }),
     });
 
-    const data = await authFetch(`/tickets/sprint/${ticketData.sprintId}`);
-    setRealTickets(data.tickets);
+    setRealTickets((prev) => [response.ticket, ...prev]);
 
     setShowTicketModal(false);
 
-  } catch (error:any) {
+    setTicketData({
+      title: "",
+      estimation: "",
+      assignee: "",
+      priority: "Medium",
+      description: "",
+      status: "Backlog",
+      sprintId: "",
+      parentTicketId: "",
+    });
+  } catch (error: any) {
     alert(error.message);
   }
 };
@@ -804,7 +839,7 @@ const handleCompleteSprint = async () => {
     alert(error.message);
   }
 };
-  const userTickets = realTickets;
+  const userTickets = realTickets.map(mapBackendTicketToUi);
   const sprintFilteredTickets = sprintFilter === 'all' ? userTickets : userTickets.filter(t => t.sprintId === sprintFilter);
   const finalFilteredTickets = role === 'DEVELOPER' && showMyTicketsOnly ? sprintFilteredTickets.filter(t => t.assignee === user.name || t.assignee.includes(user.name)) : sprintFilteredTickets;
   const backlogTickets = finalFilteredTickets;
@@ -826,10 +861,50 @@ const handleCompleteSprint = async () => {
   const parentTicketsOnly = getParentTickets(finalFilteredTickets);
   const canManageProject = user.role === 'PM' || user.role === 'ADMIN';
   const canEditTickets = true;
-  const handleTicketUpdate = (ticketId: string, updates: Partial<Ticket>) => {
-    console.log('Updating ticket:', ticketId, updates);
+const handleTicketUpdate = async (ticketId: string, updates: any) => {
+  try {
+    const priorityMap: any = {
+      High: "HIGH",
+      Medium: "MEDIUM",
+      Low: "LOW",
+    };
+
+    const statusMap: any = {
+      Backlog: "TODO",
+      "In Progress": "IN_PROGRESS",
+      Done: "DONE",
+      Blocked: "BLOCKED",
+    };
+
+    await authFetch(`/tickets/${ticketId}`, {
+      method: "PUT",
+      body: JSON.stringify({
+        title: updates.title,
+        description: updates.description,
+        priority: priorityMap[updates.priority],
+        storyPoints: updates.estimation,
+        estimatedHours: updates.estimation,
+      }),
+    });
+
+    const statusResponse = await authFetch(`/tickets/${ticketId}/status`, {
+      method: "PATCH",
+      body: JSON.stringify({
+        status: statusMap[updates.status],
+      }),
+    });
+
+    setRealTickets((prev) =>
+      prev.map((ticket) =>
+        ticket.id === ticketId ? statusResponse.ticket : ticket
+      )
+    );
+
     setSelectedTicket(null);
-  };
+  } catch (error: any) {
+    alert(error.message || "No se pudo actualizar el ticket");
+  }
+};
   const priorityColors = {
     High: 'bg-[#FF3B30]/10 text-[#FF3B30] border-[#FF3B30]/20',
     Medium: 'bg-yellow-500/10 text-yellow-500 border-yellow-500/20',
@@ -2387,12 +2462,12 @@ if (projectLoadError && !backendProject) {
                   
                   {showAssigneeDropdown && <div className="absolute z-10 w-full mt-2 bg-[#0F0F0F] border border-white/10 rounded-lg shadow-xl max-h-60 overflow-y-auto">
                       {project.team.map(member => <button key={member.id} type="button" onClick={() => {
-                  setTicketData({
-                    ...ticketData,
-                    assignee: member.name
-                  });
-                  setShowAssigneeDropdown(false);
-                }} className="w-full px-4 py-3 text-left hover:bg-white/5 transition-colors flex items-center gap-3 border-b border-white/5 last:border-0">
+setTicketData({
+  ...ticketData,
+  assignee: member.id
+});
+ setShowAssigneeDropdown(false);
+}} className="w-full px-4 py-3 text-left hover:bg-white/5 transition-colors flex items-center gap-3 border-b border-white/5 last:border-0">
                           <div className="w-8 h-8 rounded-full bg-[#FF3B30]/10 flex items-center justify-center flex-shrink-0">
                             <span className="text-xs text-[#FF3B30] font-medium">
                               {member.name.split(' ').map(n => n[0]).join('')}
@@ -2477,7 +2552,13 @@ if (projectLoadError && !backendProject) {
           }} className="flex-1">
                 Cancelar
               </Button>
-              <Button variant="primary" onClick={handleCreateTicket} className="flex-1 !bg-[#E31837] hover:!bg-[#C41430] disabled:!bg-[#E31837]/40 disabled:cursor-not-allowed transform hover:scale-[1.02] disabled:hover:scale-100" disabled={!ticketData.title || !ticketData.assignee || !ticketData.estimation}>
+              
+              <Button variant="primary" onClick={handleCreateTicket} className="flex-1 !bg-[#E31837] hover:!bg-[#C41430] disabled:!bg-[#E31837]/40 disabled:cursor-not-allowed transform hover:scale-[1.02] disabled:hover:scale-100" disabled={
+  !ticketData.title.trim() ||
+  !ticketData.assignee ||
+  !ticketData.estimation ||
+  !ticketData.sprintId
+}>
                 Crear Ticket
               </Button>
             </div>
@@ -3498,7 +3579,17 @@ if (projectLoadError && !backendProject) {
 )}
 
       {}
-      {selectedTicket && <TicketDetailModal ticket={selectedTicket} projectName={project.name} onClose={() => setSelectedTicket(null)} onUpdate={updates => handleTicketUpdate(selectedTicket.id, updates)} canEdit={canEditTickets} userRole={user.role} onDivideTicket={handleDivideTicket} />}
+      {selectedTicket &&<TicketDetailModal
+  ticket={selectedTicket}
+  projectName={project.name}
+  onClose={() => setSelectedTicket(null)}
+  onUpdate={(updates) =>
+    handleTicketUpdate(selectedTicket.id, updates)
+  }
+  canEdit={canEditTickets}
+  userRole={role}
+  onDivideTicket={handleDivideTicket}
+/>}
 
       {}
       {showCompleteSprintModal && <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4">
