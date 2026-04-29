@@ -30,10 +30,14 @@ export const mapBackendTicketToUi = (ticket: any) => ({
       ? "Backlog"
       : ticket.status === "IN_PROGRESS"
       ? "In Progress"
+      : ticket.status === "IN_REVIEW"
+      ? "Review"
       : ticket.status === "DONE"
       ? "Done"
       : ticket.status === "BLOCKED"
       ? "Blocked"
+      : ticket.status === "CANCELLED"
+      ? "Cancelled"
       : "Backlog",
 
   priority:
@@ -41,17 +45,29 @@ export const mapBackendTicketToUi = (ticket: any) => ({
       ? "Low"
       : ticket.priority === "HIGH"
       ? "High"
+      : ticket.priority === "CRITICAL"
+      ? "Critical"
       : "Medium",
 
   assignee: ticket.assignedTo?.fullName || "Sin asignar",
+  assignedToId: ticket.assignedToId || null,
 
   estimation: ticket.storyPoints || 0,
+  storyPoints: ticket.storyPoints || 0,
+  estimatedHours: ticket.estimatedHours || 0,
+  actualHours: ticket.actualHours || 0,
 
   sprintId: ticket.sprintId,
   parentTicketId: ticket.parentTicketId || null,
 
-  startDate: ticket.createdAt,
-  endDate: ticket.completedAt || null,
+  startDate: ticket.startDate || null,
+  dueDate: ticket.dueDate || null,
+  startedAt: ticket.startedAt || null,
+  completedAt: ticket.completedAt || null,
+  createdAt: ticket.createdAt || null,
+  updatedAt: ticket.updatedAt || null,
+
+  endDate: ticket.completedAt || ticket.dueDate || null,
 });
 
 export const formatBackendStatus = (status?: string) => {
