@@ -3,7 +3,7 @@ const { Resend } = require("resend");
 const resend = new Resend(process.env.RESEND_API_KEY);
 
 async function sendOtpEmail({ to, fullName, otp }) {
-  await resend.emails.send({
+  const result = await resend.emails.send({
     from: process.env.MAIL_FROM || "TaskHub <onboarding@resend.dev>",
     to,
     subject: "Código de verificación TaskHub",
@@ -14,6 +14,14 @@ async function sendOtpEmail({ to, fullName, otp }) {
       <p>Este código vence en 10 minutos.</p>
     `,
   });
+
+  console.log("Resend result:", result);
+
+  if (result.error) {
+    throw new Error(result.error.message);
+  }
+
+  return result;
 }
 
 module.exports = { sendOtpEmail };
