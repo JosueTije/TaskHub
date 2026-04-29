@@ -10,6 +10,60 @@ import type { Ticket } from '../data/mockData';
 import { useAuth } from '../contexts/AuthContext';
 import { TicketDetailModal } from '../components/TicketDetailModal';
 import { authFetch } from '../../services/api';
+
+const mapBackendSprintToUi = (sprint: any) => ({
+  id: sprint.id,
+  name: sprint.name,
+  status:
+    sprint.status === "PLANNING"
+      ? "Upcoming"
+      : sprint.status === "ACTIVE"
+      ? "Active"
+      : "Completed",
+
+  duration: `${new Date(sprint.startDate).toLocaleDateString()} - ${new Date(
+    sprint.endDate
+  ).toLocaleDateString()}`,
+
+  startDate: sprint.startDate,
+  endDate: sprint.endDate,
+  capacity: sprint.capacity
+});
+
+const mapBackendTicketToUi = (ticket: any) => ({
+  id: ticket.id,
+  title: ticket.title,
+  description: ticket.description || "",
+  status:
+    ticket.status === "TODO"
+      ? "Backlog"
+      : ticket.status === "IN_PROGRESS"
+      ? "In Progress"
+      : ticket.status === "DONE"
+      ? "Done"
+      : ticket.status === "BLOCKED"
+      ? "Blocked"
+      : "Backlog",
+
+  priority:
+    ticket.priority === "LOW"
+      ? "Low"
+      : ticket.priority === "HIGH"
+      ? "High"
+      : "Medium",
+
+  assignee: ticket.assignedTo?.fullName || "Sin asignar",
+
+  estimation: ticket.storyPoints || 0,
+
+  sprintId: ticket.sprintId,
+
+  parentTicketId: ticket.parentTicketId || null,
+
+  startDate: ticket.createdAt,
+  endDate: ticket.completedAt || null
+});
+
 interface BackendProject {
   id: string;
   name: string;
@@ -120,6 +174,29 @@ const role = user?.role || 'DEVELOPER';
 const [backendProjects, setBackendProjects] = useState<BackendProject[]>([]);
 const [isLoadingProject, setIsLoadingProject] = useState(true);
 const [projectLoadError, setProjectLoadError] = useState('');
+const [realSprints, setRealSprints] = useState<any[]>([]);
+const [realTickets, setRealTickets] = useState<any[]>([]);
+const [loadingAgile, setLoadingAgile] = useState(false);
+
+useEffect(() => {
+  if (!id) return;
+
+  const loadAgile = async () => {
+    try {
+      setLoadingAgile(true);
+
+      const sprintRes = await authFetch(`/sprints/project/${id}`);
+      setRealSprints(sprintRes.sprints || []);
+
+    } catch (error) {
+      console.error(error);
+    } finally {
+      setLoadingAgile(false);
+    }
+  };
+
+  loadAgile();
+}, [id]);
 
 useEffect(() => {
   const loadProjects = async () => {
@@ -138,6 +215,8 @@ useEffect(() => {
 
   loadProjects();
 }, []);
+
+
 
 const mockProject = projects.find(p => p.id === id) || projects[0];
 const backendProject = backendProjects.find(p => p.id === id) || null;
@@ -252,8 +331,8 @@ const project = useMemo(() => {
       teamVelocity: 'N/A',
       openRisks: 'N/A',
 
-      sprints: [],
-      tickets: [],
+sprints: realSprints.map(mapBackendSprintToUi),
+tickets: realTickets.map(mapBackendTicketToUi),
       notifications: [],
       progressHistory: [{ date: 'Real', planned: 0, actual: 0 }],
 
@@ -358,8 +437,8 @@ const project = useMemo(() => {
     teamVelocity: 'N/A',
     openRisks: 'N/A',
 
-    sprints: [],
-    tickets: [],
+sprints: realSprints.map(mapBackendSprintToUi),
+tickets: realTickets.map(mapBackendTicketToUi),
     notifications: [],
     progressHistory: [{ date: 'Real', planned: 0, actual: 0 }],
 
@@ -368,8 +447,7 @@ const project = useMemo(() => {
       : 'N/A',
     closedBy: 'N/A',
   };
-}, [mockProject, backendProject]);
-
+}, [mockProject, backendProject, realSprints, realTickets]);
   const [showProgressModal, setShowProgressModal] = useState(false);
   const [showSprintModal, setShowSprintModal] = useState(false);
   const [showTicketModal, setShowTicketModal] = useState(false);
@@ -432,6 +510,22 @@ const project = useMemo(() => {
   }]);
   const activeSprint = project.sprints.find(s => s.status === 'Active');
   const [sprintFilter, setSprintFilter] = useState<string | 'all'>(activeSprint?.id || 'all');
+
+  useEffect(() => {
+  if (sprintFilter === "all") return;
+  if (!sprintFilter) return;
+
+  const loadTickets = async () => {
+    try {
+      const data = await authFetch(`/tickets/sprint/${sprintFilter}`);
+      setRealTickets(data.tickets || []);
+    } catch (error) {
+      console.error(error);
+    }
+  };
+
+  loadTickets();
+}, [sprintFilter]);
   const [ticketsView, setTicketsView] = useState<'table' | 'kanban'>('table');
   const [showMyTicketsOnly, setShowMyTicketsOnly] = useState(false);
   const sprintsGantt = [{
@@ -521,73 +615,49 @@ const project = useMemo(() => {
       blocker: ''
     });
   };
-  const handleCreateSprint = () => {
-    const hasActiveSprint = project.sprints.some(s => s.status === 'Active');
-    if (hasActiveSprint && sprintData.status === 'Active') {
-      alert('⚠️ No puedes crear un sprint activo mientras hay otro sprint en curso.\n\nPor favor, completa el sprint actual primero o crea el nuevo sprint con estado "Próximo".');
-      return;
-    }
-    const start = new Date(sprintData.startDate);
-    const end = new Date(sprintData.endDate);
-    const days = Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24));
-    const duration = `${sprintData.startDate} - ${sprintData.endDate}`;
-    const newSprintId = `sprint-${Date.now()}`;
-    const newSprint = {
-      id: newSprintId,
-      name: sprintData.name,
-      duration: duration,
-      status: sprintData.status,
-      progress: 0,
-      velocity: 0,
-      capacity: parseInt(sprintData.capacity),
-      used: 0,
-      startDate: sprintData.startDate,
-      endDate: sprintData.endDate
-    };
-    console.log('Sprint created:', newSprint);
-    alert(`✅ Sprint "${sprintData.name}" creado exitosamente!\n\n📅 Duración: ${days} días\n⏱️ Capacidad: ${sprintData.capacity} horas\n\nAhora puedes agregar tickets a este sprint desde la sección de Gestión Ágil.`);
-    setSprintFilter(newSprintId);
+const handleCreateSprint = async () => {
+  try {
+    await authFetch(`/sprints/project/${id}`, {
+      method: "POST",
+      body: JSON.stringify({
+        name: sprintData.name,
+        goal: sprintData.name,
+        capacity: Number(sprintData.capacity),
+        startDate: sprintData.startDate,
+        endDate: sprintData.endDate
+      })
+    });
+
+    const data = await authFetch(`/sprints/project/${id}`);
+    setRealSprints(data.sprints);
+
     setShowSprintModal(false);
-    setSprintData({
-      name: '',
-      startDate: '',
-      endDate: '',
-      capacity: '',
-      status: 'Upcoming'
+  } catch (error:any) {
+    alert(error.message);
+  }
+};
+const handleCreateTicket = async () => {
+  try {
+    await authFetch(`/tickets/sprint/${ticketData.sprintId}`, {
+      method: "POST",
+      body: JSON.stringify({
+        title: ticketData.title,
+        description: ticketData.description,
+        priority: ticketData.priority,
+        estimatedHours: Number(ticketData.estimation),
+        assignedToId: ticketData.assignee || null
+      })
     });
-  };
-  const handleCreateTicket = () => {
-    if (!ticketData.sprintId) {
-      alert('⚠️ Debes seleccionar un sprint para el ticket.\n\nPor favor selecciona un sprint desde el filtro global.');
-      return;
-    }
-    const newTicket = {
-      id: `ticket-${Date.now()}`,
-      title: ticketData.title,
-      description: ticketData.description,
-      status: ticketData.status,
-      priority: ticketData.priority,
-      assignee: ticketData.assignee,
-      estimation: parseInt(ticketData.estimation) || 0,
-      sprintId: ticketData.sprintId,
-      startDate: project.sprints.find(s => s.id === ticketData.sprintId)?.startDate || '',
-      dueDate: project.sprints.find(s => s.id === ticketData.sprintId)?.endDate || '',
-      createdAt: new Date().toISOString()
-    };
-    console.log('Ticket created:', newTicket);
-    const sprintName = project.sprints.find(s => s.id === ticketData.sprintId)?.name || 'Sprint';
-    alert(`✅ Ticket creado exitosamente!\n\n📋 ${ticketData.title}\n🏃 Sprint: ${sprintName}\n⏱️ Estimación: ${ticketData.estimation}h\n👤 Asignado a: ${ticketData.assignee || 'Sin asignar'}\n\nEl ticket aparecerá en la tabla/kanban y en el diagrama de Gantt.`);
+
+    const data = await authFetch(`/tickets/sprint/${ticketData.sprintId}`);
+    setRealTickets(data.tickets);
+
     setShowTicketModal(false);
-    setTicketData({
-      title: '',
-      estimation: '',
-      assignee: '',
-      priority: 'Medium',
-      description: '',
-      status: 'Backlog',
-      sprintId: sprintFilter !== 'all' ? sprintFilter : activeSprint?.id || ''
-    });
-  };
+
+  } catch (error:any) {
+    alert(error.message);
+  }
+};
   const handleDivideTicket = (ticket: Ticket) => {
     setTicketToDivide(ticket);
     setShowDivideTicketModal(true);
@@ -668,40 +738,25 @@ const project = useMemo(() => {
       role: ''
     });
   };
-  const handleCompleteSprint = () => {
-    const currentSprint = project.sprints.find(s => s.id === sprintFilter);
-    if (!currentSprint) {
-      alert('⚠️ No se pudo encontrar el sprint seleccionado.');
-      return;
-    }
-    const pendingTickets = backlogTickets.filter(t => t.status !== 'Done');
-    if (pendingTickets.length > 0) {
-      const confirmComplete = window.confirm(`⚠️ Hay ${pendingTickets.length} ticket(s) sin completar en este sprint.\n\n` + `¿Estás seguro de que deseas concluir el sprint?\n\n` + `Los tickets pendientes quedarán registrados para análisis retrospectivo.`);
-      if (!confirmComplete) {
-        return;
-      }
-    }
-    const totalTickets = backlogTickets.length;
-    const completedTickets = backlogTickets.filter(t => t.status === 'Done').length;
-    const completionRate = totalTickets > 0 ? Math.round(completedTickets / totalTickets * 100) : 0;
-    const totalPoints = backlogTickets.reduce((sum, t) => sum + t.estimation, 0);
-    const completedPoints = backlogTickets.filter(t => t.status === 'Done').reduce((sum, t) => sum + t.estimation, 0);
-    console.log('Sprint completed:', {
-      sprintId: currentSprint.id,
-      sprintName: currentSprint.name,
-      totalTickets,
-      completedTickets,
-      completionRate,
-      totalPoints,
-      completedPoints,
-      completedAt: new Date().toISOString()
+const handleCompleteSprint = async () => {
+  try {
+    await authFetch(`/sprints/${sprintFilter}/status`, {
+      method: "PATCH",
+      body: JSON.stringify({
+        status: "COMPLETED"
+      })
     });
-    alert(`✅ Sprint "${currentSprint.name}" concluido exitosamente!\n\n` + `📊 Métricas Finales:\n` + `• Tickets completados: ${completedTickets}/${totalTickets} (${completionRate}%)\n` + `• Story Points: ${completedPoints}/${totalPoints}\n` + `• Velocidad del equipo: ${completedPoints} puntos\n\n` + `El sprint ahora está marcado como "Completado" y sus datos están disponibles en el historial.`);
-    const nextActiveSprint = project.sprints.find(s => s.status === 'Active' && s.id !== currentSprint.id);
-    setSprintFilter(nextActiveSprint?.id || 'all');
+
+    const data = await authFetch(`/sprints/project/${id}`);
+    setRealSprints(data.sprints);
+
     setShowCompleteSprintModal(false);
-  };
-  const userTickets = project.tickets;
+
+  } catch (error:any) {
+    alert(error.message);
+  }
+};
+  const userTickets = realTickets;
   const sprintFilteredTickets = sprintFilter === 'all' ? userTickets : userTickets.filter(t => t.sprintId === sprintFilter);
   const finalFilteredTickets = role === 'DEVELOPER' && showMyTicketsOnly ? sprintFilteredTickets.filter(t => t.assignee === user.name || t.assignee.includes(user.name)) : sprintFilteredTickets;
   const backlogTickets = finalFilteredTickets;
@@ -806,7 +861,7 @@ if (projectLoadError && !backendProject) {
             <div className="flex items-center gap-3">
               <select value={sprintFilter} onChange={e => setSprintFilter(e.target.value)} className="bg-[#1C1C1E] border border-white/10 rounded-xl px-4 py-3 text-white text-sm focus:outline-none focus:ring-2 focus:ring-[#FF3B30] min-w-[250px]">
                 <option value="all">📊 Todos los Sprints (Vista Histórica)</option>
-                {project.sprints.map(sprint => <option key={sprint.id} value={sprint.id}>
+                {realSprints.map(sprint => <option key={sprint.id} value={sprint.id}>
                     {sprint.status === 'Active' && '🏃 '}
                     {sprint.status === 'Completed' && '✅ '}
                     {sprint.status === 'Upcoming' && '📅 '}
