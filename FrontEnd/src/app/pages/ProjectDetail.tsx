@@ -10,158 +10,20 @@ import type { Ticket } from '../data/mockData';
 import { useAuth } from '../contexts/AuthContext';
 import { TicketDetailModal } from '../components/TicketDetailModal';
 import { authFetch } from '../../services/api';
+import type { BackendProject } from '../../types/project';
+import {
+  mapBackendSprintToUi,
+  mapBackendTicketToUi,
+  formatBackendStatus,
+  formatBackendRisk,
+  formatDateLabel,
+  formatMoneyLabel,
+  safeText,
+} from '../../utils/projectMappers';
 
 
 
-const mapBackendSprintToUi = (sprint: any) => ({
-  id: sprint.id,
-  name: sprint.name,
-  status:
-    sprint.status === "PLANNING"
-      ? "Upcoming"
-      : sprint.status === "ACTIVE"
-      ? "Active"
-      : "Completed",
 
-  duration: `${new Date(sprint.startDate).toLocaleDateString()} - ${new Date(
-    sprint.endDate
-  ).toLocaleDateString()}`,
-
-  startDate: sprint.startDate,
-  endDate: sprint.endDate,
-  capacity: sprint.capacity
-});
-
-const mapBackendTicketToUi = (ticket: any) => ({
-  id: ticket.id,
-  title: ticket.title,
-  description: ticket.description || "",
-  status:
-    ticket.status === "TODO"
-      ? "Backlog"
-      : ticket.status === "IN_PROGRESS"
-      ? "In Progress"
-      : ticket.status === "DONE"
-      ? "Done"
-      : ticket.status === "BLOCKED"
-      ? "Blocked"
-      : "Backlog",
-
-  priority:
-    ticket.priority === "LOW"
-      ? "Low"
-      : ticket.priority === "HIGH"
-      ? "High"
-      : "Medium",
-
-  assignee: ticket.assignedTo?.fullName || "Sin asignar",
-
-  estimation: ticket.storyPoints || 0,
-
-  sprintId: ticket.sprintId,
-
-  parentTicketId: ticket.parentTicketId || null,
-
-  startDate: ticket.createdAt,
-  endDate: ticket.completedAt || null
-});
-
-interface BackendProject {
-  id: string;
-  name: string;
-  code: string;
-  description: string | null;
-  status: 'ACTIVE' | 'ON_HOLD' | 'COMPLETED' | 'ARCHIVED';
-  riskLevel: 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
-  startDate: string;
-  targetEndDate: string;
-  actualEndDate: string | null;
-  budget: number | null;
-  createdAt: string;
-  updatedAt: string;
-  pm: {
-    id: string;
-    fullName: string;
-    email: string;
-    role: string;
-  } | null;
-  createdBy: {
-    id: string;
-    fullName: string;
-    email: string;
-    role: string;
-  };
-  members: Array<{
-    id: string;
-    fullName: string;
-    email: string;
-    role: string;
-    avatarUrl: string | null;
-  }>;
-  stats: {
-    membersCount: number;
-    sprintsCount: number;
-    ticketsCount: number;
-  };
-}
-
-const formatBackendStatus = (status?: BackendProject['status']) => {
-  switch (status) {
-    case 'ACTIVE':
-      return 'Active';
-    case 'ON_HOLD':
-      return 'On Hold';
-    case 'COMPLETED':
-      return 'Completed';
-    case 'ARCHIVED':
-      return 'Archived';
-    default:
-      return 'N/A';
-  }
-};
-
-const formatBackendRisk = (risk?: BackendProject['riskLevel']) => {
-  switch (risk) {
-    case 'LOW':
-      return 'Low';
-    case 'MEDIUM':
-      return 'Medium';
-    case 'HIGH':
-      return 'High';
-    case 'CRITICAL':
-      return 'High';
-    default:
-      return 'N/A';
-  }
-};
-
-const formatDateLabel = (value?: string | null) => {
-  if (!value) return 'N/A';
-
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return 'N/A';
-
-  return date.toLocaleDateString('es-MX', {
-    year: 'numeric',
-    month: 'short',
-    day: 'numeric',
-  });
-};
-
-const formatMoneyLabel = (value?: number | null) => {
-  if (value === null || value === undefined) return 'N/A';
-
-  return new Intl.NumberFormat('es-MX', {
-    style: 'currency',
-    currency: 'MXN',
-    maximumFractionDigits: 2,
-  }).format(value);
-};
-
-const safeText = (value?: string | null) => {
-  if (!value || !String(value).trim()) return 'N/A';
-  return value;
-};
 export function ProjectDetail() {
 const {
   id
@@ -183,6 +45,38 @@ const [loadingAgile, setLoadingAgile] = useState(false);
 const [availableDevelopers, setAvailableDevelopers] = useState<any[]>([]);
 const [selectedDeveloperId, setSelectedDeveloperId] = useState("");
 const [loadingDevelopers, setLoadingDevelopers] = useState(false);
+
+
+const [dashboard, setDashboard] = useState<any>(null);
+
+const mapDashboardRiskToUi = (risk?: string) => {
+  switch (risk) {
+    case "HIGH":
+      return "High";
+    case "MEDIUM":
+      return "Medium";
+    case "LOW":
+      return "Low";
+    default:
+      return "Low";
+  }
+};
+
+const loadDashboard = async () => {
+  if (!id) return;
+
+  try {
+const data = await authFetch(`/analytics/project/${id}/dashboard`);
+console.log("DASHBOARD DATA:", data);
+setDashboard(data);
+  } catch (error) {
+    console.error(error);
+  }
+};
+
+useEffect(() => {
+  loadDashboard();
+}, [id]);
 
 useEffect(() => {
   if (!id) return;
@@ -229,6 +123,26 @@ const backendProject = backendProjects.find(p => p.id === id) || null;
 
 const project = useMemo(() => {
   const mapTeamFromMembers = (members?: BackendProject['members']) => {
+    if (dashboard?.teamMetrics?.length) {
+      return dashboard.teamMetrics.map((member: any) => ({
+        id: member.id,
+        name: member.name || 'N/A',
+        role: member.role || 'Developer',
+        email: member.email || 'N/A',
+        avatar:
+          member.name
+            ?.split(' ')
+            .filter(Boolean)
+            .map((part: string) => part[0])
+            .join('')
+            .slice(0, 2)
+            .toUpperCase() || 'NA',
+        tasksAssigned: member.tasksAssigned ?? 0,
+        performance: member.performance ?? 0,
+        status: member.status || 'Active',
+      }));
+    }
+
     if (!members || members.length === 0) return [];
 
     return members.map((m) => ({
@@ -260,7 +174,7 @@ const project = useMemo(() => {
       description: safeText(backendProject.description),
 
       status: formatBackendStatus(backendProject.status),
-      risk: formatBackendRisk(backendProject.riskLevel),
+      risk: dashboard?.kpis?.risk ? mapDashboardRiskToUi(dashboard.kpis.risk) : formatBackendRisk(backendProject.riskLevel),
 
       startDate: backendProject.startDate ?? null,
       targetEndDate: backendProject.targetEndDate ?? null,
@@ -328,19 +242,22 @@ const project = useMemo(() => {
       sprintsCountLabel: backendProject.stats?.sprintsCount ?? 'N/A',
       ticketsCountLabel: backendProject.stats?.ticketsCount ?? 'N/A',
 
-      progress: 0,
-      progressLabel: 'N/A',
-      scheduleVariance: 0,
-      spi: 0,
-      delayedMilestones: 'N/A',
-      blockedTickets: 'N/A',
+      progress: dashboard?.kpis?.progress ?? 0,
+      progressLabel:
+        dashboard?.kpis?.progress !== undefined && dashboard?.kpis?.progress !== null
+          ? `${dashboard.kpis.progress}%`
+          : '0%',
+      scheduleVariance: dashboard?.kpis?.scheduleVariance ?? 0,
+      spi: dashboard?.kpis?.spi ?? 1,
+      delayedMilestones: dashboard?.kpis?.delayedMilestones ?? 0,
+      blockedTickets: dashboard?.kpis?.blockedTickets ?? 0,
       teamVelocity: 'N/A',
       openRisks: 'N/A',
 
 sprints: realSprints.map(mapBackendSprintToUi),
 tickets: realTickets.map(mapBackendTicketToUi),
       notifications: [],
-      progressHistory: [{ date: 'Real', planned: 0, actual: 0 }],
+      progressHistory: dashboard?.progressHistory?.length ? dashboard.progressHistory : [{ date: 'Real', planned: 0, actual: 0 }],
 
       closedDate: backendProject.actualEndDate
         ? new Date(backendProject.actualEndDate).toISOString().split('T')[0]
@@ -358,7 +275,7 @@ tickets: realTickets.map(mapBackendTicketToUi),
     description: safeText(backendProject?.description),
 
     status: formatBackendStatus(backendProject?.status),
-    risk: formatBackendRisk(backendProject?.riskLevel),
+    risk: dashboard?.kpis?.risk ? mapDashboardRiskToUi(dashboard.kpis.risk) : formatBackendRisk(backendProject?.riskLevel),
 
     startDate: backendProject?.startDate ?? null,
     targetEndDate: backendProject?.targetEndDate ?? null,
@@ -434,26 +351,29 @@ tickets: realTickets.map(mapBackendTicketToUi),
     sprintsCountLabel: backendProject?.stats?.sprintsCount ?? 'N/A',
     ticketsCountLabel: backendProject?.stats?.ticketsCount ?? 'N/A',
 
-    progress: 0,
-    progressLabel: 'N/A',
-    scheduleVariance: 0,
-    spi: 0,
-    delayedMilestones: 'N/A',
-    blockedTickets: 'N/A',
+    progress: dashboard?.kpis?.progress ?? 0,
+    progressLabel:
+      dashboard?.kpis?.progress !== undefined && dashboard?.kpis?.progress !== null
+        ? `${dashboard.kpis.progress}%`
+        : '0%',
+    scheduleVariance: dashboard?.kpis?.scheduleVariance ?? 0,
+    spi: dashboard?.kpis?.spi ?? 1,
+    delayedMilestones: dashboard?.kpis?.delayedMilestones ?? 0,
+    blockedTickets: dashboard?.kpis?.blockedTickets ?? 0,
     teamVelocity: 'N/A',
     openRisks: 'N/A',
 
 sprints: realSprints.map(mapBackendSprintToUi),
 tickets: realTickets.map(mapBackendTicketToUi),
     notifications: [],
-    progressHistory: [{ date: 'Real', planned: 0, actual: 0 }],
+    progressHistory: dashboard?.progressHistory?.length ? dashboard.progressHistory : [{ date: 'Real', planned: 0, actual: 0 }],
 
     closedDate: backendProject?.actualEndDate
       ? new Date(backendProject.actualEndDate).toISOString().split('T')[0]
       : 'N/A',
     closedBy: 'N/A',
   };
-}, [mockProject, backendProject, realSprints, realTickets]);
+}, [mockProject, backendProject, realSprints, realTickets, dashboard]);
   const [showProgressModal, setShowProgressModal] = useState(false);
   const [showSprintModal, setShowSprintModal] = useState(false);
   const [showTicketModal, setShowTicketModal] = useState(false);
@@ -545,21 +465,31 @@ tickets: realTickets.map(mapBackendTicketToUi),
   const activeSprint = project.sprints.find(s => s.status === 'Active');
   const [sprintFilter, setSprintFilter] = useState<string | 'all'>(activeSprint?.id || 'all');
 
-  useEffect(() => {
-  if (sprintFilter === "all") return;
-  if (!sprintFilter) return;
+useEffect(() => {
+  if (!realSprints.length) return;
 
   const loadTickets = async () => {
     try {
-      const data = await authFetch(`/tickets/sprint/${sprintFilter}`);
-      setRealTickets(data.tickets || []);
+      if (sprintFilter === "all") {
+        const responses = await Promise.all(
+          realSprints.map((sprint) =>
+            authFetch(`/tickets/sprint/${sprint.id}`)
+          )
+        );
+
+        const allTickets = responses.flatMap((res) => res.tickets || []);
+        setRealTickets(allTickets);
+      } else {
+        const data = await authFetch(`/tickets/sprint/${sprintFilter}`);
+        setRealTickets(data.tickets || []);
+      }
     } catch (error) {
       console.error(error);
     }
   };
 
   loadTickets();
-}, [sprintFilter]);
+}, [sprintFilter, realSprints]);
   const [ticketsView, setTicketsView] = useState<'table' | 'kanban'>('table');
   const [showMyTicketsOnly, setShowMyTicketsOnly] = useState(false);
   const sprintsGantt = [{
@@ -664,6 +594,7 @@ const handleCreateSprint = async () => {
 
     const data = await authFetch(`/sprints/project/${id}`);
     setRealSprints(data.sprints);
+    await loadDashboard();
 
     setShowSprintModal(false);
   } catch (error:any) {
@@ -672,23 +603,50 @@ const handleCreateSprint = async () => {
 };
 const handleCreateTicket = async () => {
   try {
-    await authFetch(`/tickets/sprint/${ticketData.sprintId}`, {
+    const priorityMap: any = {
+      High: "HIGH",
+      Medium: "MEDIUM",
+      Low: "LOW",
+    };
+
+    const statusMap: any = {
+      Backlog: "TODO",
+      "In Progress": "IN_PROGRESS",
+      Review: "IN_REVIEW",
+      Blocked: "BLOCKED",
+      Done: "DONE",
+    };
+
+    const response = await authFetch(`/tickets/sprint/${ticketData.sprintId}`, {
       method: "POST",
       body: JSON.stringify({
         title: ticketData.title,
         description: ticketData.description,
-        priority: ticketData.priority,
+        priority: priorityMap[ticketData.priority] || "MEDIUM",
+        status: statusMap[ticketData.status] || "TODO",
+        storyPoints: Number(ticketData.estimation),
         estimatedHours: Number(ticketData.estimation),
-        assignedToId: ticketData.assignee || null
-      })
+        assignedToId: ticketData.assignee || null,
+      }),
     });
 
-    const data = await authFetch(`/tickets/sprint/${ticketData.sprintId}`);
-    setRealTickets(data.tickets);
+    setRealTickets((prev) => [response.ticket, ...prev]);
+
+    await loadDashboard();
 
     setShowTicketModal(false);
 
-  } catch (error:any) {
+    setTicketData({
+      title: "",
+      estimation: "",
+      assignee: "",
+      priority: "Medium",
+      description: "",
+      status: "Backlog",
+      sprintId: "",
+      parentTicketId: "",
+    });
+  } catch (error: any) {
     alert(error.message);
   }
 };
@@ -779,6 +737,7 @@ const handleAddDeveloper = async () => {
 
     const data = await authFetch<{ projects: BackendProject[] }>("/projects");
     setBackendProjects(data.projects || []);
+    await loadDashboard();
 
     setShowAddDeveloperModal(false);
     setSelectedDeveloperId("");
@@ -797,6 +756,7 @@ const handleCompleteSprint = async () => {
 
     const data = await authFetch(`/sprints/project/${id}`);
     setRealSprints(data.sprints);
+    await loadDashboard();
 
     setShowCompleteSprintModal(false);
 
@@ -804,7 +764,7 @@ const handleCompleteSprint = async () => {
     alert(error.message);
   }
 };
-  const userTickets = realTickets;
+  const userTickets = realTickets.map(mapBackendTicketToUi);
   const sprintFilteredTickets = sprintFilter === 'all' ? userTickets : userTickets.filter(t => t.sprintId === sprintFilter);
   const finalFilteredTickets = role === 'DEVELOPER' && showMyTicketsOnly ? sprintFilteredTickets.filter(t => t.assignee === user.name || t.assignee.includes(user.name)) : sprintFilteredTickets;
   const backlogTickets = finalFilteredTickets;
@@ -826,10 +786,52 @@ const handleCompleteSprint = async () => {
   const parentTicketsOnly = getParentTickets(finalFilteredTickets);
   const canManageProject = user.role === 'PM' || user.role === 'ADMIN';
   const canEditTickets = true;
-  const handleTicketUpdate = (ticketId: string, updates: Partial<Ticket>) => {
-    console.log('Updating ticket:', ticketId, updates);
+const handleTicketUpdate = async (ticketId: string, updates: any) => {
+  try {
+    const priorityMap: any = {
+      High: "HIGH",
+      Medium: "MEDIUM",
+      Low: "LOW",
+    };
+
+    const statusMap: any = {
+      Backlog: "TODO",
+      "In Progress": "IN_PROGRESS",
+      Done: "DONE",
+      Blocked: "BLOCKED",
+    };
+
+    await authFetch(`/tickets/${ticketId}`, {
+      method: "PUT",
+      body: JSON.stringify({
+        title: updates.title,
+        description: updates.description,
+        priority: priorityMap[updates.priority],
+        storyPoints: updates.estimation,
+        estimatedHours: updates.estimation,
+      }),
+    });
+
+    const statusResponse = await authFetch(`/tickets/${ticketId}/status`, {
+      method: "PATCH",
+      body: JSON.stringify({
+        status: statusMap[updates.status],
+      }),
+    });
+
+    setRealTickets((prev) =>
+      prev.map((ticket) =>
+        ticket.id === ticketId ? statusResponse.ticket : ticket
+      )
+    );
+
+    await loadDashboard();
+
     setSelectedTicket(null);
-  };
+  } catch (error: any) {
+    alert(error.message || "No se pudo actualizar el ticket");
+  }
+};
   const priorityColors = {
     High: 'bg-[#FF3B30]/10 text-[#FF3B30] border-[#FF3B30]/20',
     Medium: 'bg-yellow-500/10 text-yellow-500 border-yellow-500/20',
@@ -1090,7 +1092,7 @@ if (projectLoadError && !backendProject) {
                     </div>
                     {project.scheduleVariance >= 0 ? <TrendingUp className="w-4 h-4 text-green-500" /> : <TrendingDown className="w-4 h-4 text-[#FF3B30]" />}
                   </div>
-                  <p className="text-3xl font-bold text-white mb-1">N/A</p>
+                  <p className="text-3xl font-bold text-white mb-1">{project.scheduleVariance}</p>
                   <p className="text-sm text-[#8E8E93]">Schedule Variance</p>
                 </div>
 
@@ -1102,7 +1104,7 @@ if (projectLoadError && !backendProject) {
                     </div>
                     {project.spi >= 1 ? <TrendingUp className="w-4 h-4 text-green-500" /> : <TrendingDown className="w-4 h-4 text-[#FF3B30]" />}
                   </div>
-                <p className="text-3xl font-bold text-white mb-1">N/A</p>
+                <p className="text-3xl font-bold text-white mb-1">{project.spi}</p>
                   <p className="text-sm text-[#8E8E93]">SPI</p>
                 </div>
 
@@ -2387,12 +2389,12 @@ if (projectLoadError && !backendProject) {
                   
                   {showAssigneeDropdown && <div className="absolute z-10 w-full mt-2 bg-[#0F0F0F] border border-white/10 rounded-lg shadow-xl max-h-60 overflow-y-auto">
                       {project.team.map(member => <button key={member.id} type="button" onClick={() => {
-                  setTicketData({
-                    ...ticketData,
-                    assignee: member.name
-                  });
-                  setShowAssigneeDropdown(false);
-                }} className="w-full px-4 py-3 text-left hover:bg-white/5 transition-colors flex items-center gap-3 border-b border-white/5 last:border-0">
+setTicketData({
+  ...ticketData,
+  assignee: member.id
+});
+ setShowAssigneeDropdown(false);
+}} className="w-full px-4 py-3 text-left hover:bg-white/5 transition-colors flex items-center gap-3 border-b border-white/5 last:border-0">
                           <div className="w-8 h-8 rounded-full bg-[#FF3B30]/10 flex items-center justify-center flex-shrink-0">
                             <span className="text-xs text-[#FF3B30] font-medium">
                               {member.name.split(' ').map(n => n[0]).join('')}
@@ -2477,7 +2479,13 @@ if (projectLoadError && !backendProject) {
           }} className="flex-1">
                 Cancelar
               </Button>
-              <Button variant="primary" onClick={handleCreateTicket} className="flex-1 !bg-[#E31837] hover:!bg-[#C41430] disabled:!bg-[#E31837]/40 disabled:cursor-not-allowed transform hover:scale-[1.02] disabled:hover:scale-100" disabled={!ticketData.title || !ticketData.assignee || !ticketData.estimation}>
+              
+              <Button variant="primary" onClick={handleCreateTicket} className="flex-1 !bg-[#E31837] hover:!bg-[#C41430] disabled:!bg-[#E31837]/40 disabled:cursor-not-allowed transform hover:scale-[1.02] disabled:hover:scale-100" disabled={
+  !ticketData.title.trim() ||
+  !ticketData.assignee ||
+  !ticketData.estimation ||
+  !ticketData.sprintId
+}>
                 Crear Ticket
               </Button>
             </div>
@@ -3498,7 +3506,17 @@ if (projectLoadError && !backendProject) {
 )}
 
       {}
-      {selectedTicket && <TicketDetailModal ticket={selectedTicket} projectName={project.name} onClose={() => setSelectedTicket(null)} onUpdate={updates => handleTicketUpdate(selectedTicket.id, updates)} canEdit={canEditTickets} userRole={user.role} onDivideTicket={handleDivideTicket} />}
+      {selectedTicket &&<TicketDetailModal
+  ticket={selectedTicket}
+  projectName={project.name}
+  onClose={() => setSelectedTicket(null)}
+  onUpdate={(updates) =>
+    handleTicketUpdate(selectedTicket.id, updates)
+  }
+  canEdit={canEditTickets}
+  userRole={role}
+  onDivideTicket={handleDivideTicket}
+/>}
 
       {}
       {showCompleteSprintModal && <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4">

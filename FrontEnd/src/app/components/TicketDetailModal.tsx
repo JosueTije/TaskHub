@@ -57,14 +57,17 @@ export function TicketDetailModal({
   const canEditFullTicket = userRole === 'PM' || userRole === 'ADMIN';
   const canEditStatus = true;
   const canEditTime = true;
-  const handleSave = () => {
-    onUpdate({
-      title: editedTitle,
-      status: selectedStatus,
-      priority: selectedPriority
-    });
-    setIsEditing(false);
-  };
+const handleSave = () => {
+  onUpdate({
+    title: editedTitle,
+    description,
+    status: selectedStatus,
+    priority: selectedPriority,
+    estimation: ticket.estimation,
+  });
+
+  setIsEditing(false);
+};
   const handleAddComment = () => {
     if (newComment.trim()) {
       const comment: Comment = {
