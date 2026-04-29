@@ -126,7 +126,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const login = async (email: string, password: string): Promise<LoginResult> => {
     try {
-      const res = await fetch('http://localhost:4000/auth/login', {
+      const res = await fetch(`${import.meta.env.VITE_API_URL}/auth/login`, {
         method: 'POST',
         credentials: 'include',
         headers: {
@@ -185,7 +185,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         return { success: false, error: 'Sesión OTP no encontrada' };
       }
 
-      const res = await fetch('http://localhost:4000/auth/verify-otp', {
+      const res = await fetch(`${import.meta.env.VITE_API_URL}/auth/verify-otp'`, {
         method: 'POST',
         credentials: 'include',
         headers: {
@@ -232,7 +232,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const logout = async () => {
     try {
-      await fetch('http://localhost:4000/auth/logout', {
+      await fetch(`${import.meta.env.VITE_API_URL}/auth/logout`, {
         method: 'POST',
         credentials: 'include',
       });
@@ -275,7 +275,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         };
       }
 
-      const res = await fetch('http://localhost:4000/auth/set-password', {
+      const res = await fetch(`${import.meta.env.VITE_API_URL}/auth/set-password`, {
         method: 'POST',
         credentials: 'include',
         headers: {

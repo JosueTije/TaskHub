@@ -308,7 +308,7 @@ function CreateUserModal({
     e.preventDefault();
     setIsLoading(true);
     try {
-      const response = await fetch("http://localhost:4000/admin/users", {
+      const response = await fetch(`${import.meta.env.VITE_API_URL}/admin/users`, {
         method: "POST",
         credentials: "include",
         headers: {
@@ -470,7 +470,7 @@ function EditUserModal({
     e.preventDefault();
     setIsLoading(true);
     try {
-      const response = await fetch("http://localhost:4000/admin/users", {
+      const response = await fetch(`${import.meta.env.VITE_API_URL}/admin/users`, {
         method: "POST",
         credentials: "include",
         headers: {
