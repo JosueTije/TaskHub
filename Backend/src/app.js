@@ -17,7 +17,10 @@ const app = express();
 app.use(helmet()); //protecciónn !!
 app.use(
   cors({
-    origin: "http://localhost:5173", //permisos!
+    origin: [
+      "http://localhost:5173",
+      "https://taskhub-frontend-phi.vercel.app",
+    ],
     credentials: true,
   })
 );
