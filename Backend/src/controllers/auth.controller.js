@@ -16,13 +16,11 @@ async function loginController(req, res) {
 
     const result = await login({ email, password });
 
-    if (!result.requiresOtp && result.accessToken) {
-      res.cookie("token", result.accessToken, {
-        httpOnly: true,
-        secure: false,
-        sameSite: "lax",
-      });
-    }
+res.cookie("token", result.accessToken, {
+  httpOnly: true,
+  secure: true,
+  sameSite: "none",
+});
 
     return res.status(200).json(result);
   } catch (error) {
@@ -80,12 +78,11 @@ async function setNewPasswordController(req, res) {
 
 async function logoutController(req, res) {
   try {
-    res.clearCookie("token", {
-      httpOnly: true,
-      secure: false,
-      sameSite: "lax",
-    });
-
+res.clearCookie("token", {
+  httpOnly: true,
+  secure: true,
+  sameSite: "none",
+});
     return res.status(200).json({
       message: "Sesión cerrada correctamente",
     });

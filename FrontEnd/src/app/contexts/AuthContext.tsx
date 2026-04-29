@@ -185,7 +185,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         return { success: false, error: 'Sesión OTP no encontrada' };
       }
 
-      const res = await fetch(`${import.meta.env.VITE_API_URL}/auth/verify-otp'`, {
+      const res = await fetch(`${import.meta.env.VITE_API_URL}/auth/verify-otp`, {
         method: 'POST',
         credentials: 'include',
         headers: {
