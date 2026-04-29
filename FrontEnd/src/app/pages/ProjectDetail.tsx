@@ -10,158 +10,20 @@ import type { Ticket } from '../data/mockData';
 import { useAuth } from '../contexts/AuthContext';
 import { TicketDetailModal } from '../components/TicketDetailModal';
 import { authFetch } from '../../services/api';
+import type { BackendProject } from '../../types/project';
+import {
+  mapBackendSprintToUi,
+  mapBackendTicketToUi,
+  formatBackendStatus,
+  formatBackendRisk,
+  formatDateLabel,
+  formatMoneyLabel,
+  safeText,
+} from '../../utils/projectMappers';
 
 
 
-const mapBackendSprintToUi = (sprint: any) => ({
-  id: sprint.id,
-  name: sprint.name,
-  status:
-    sprint.status === "PLANNING"
-      ? "Upcoming"
-      : sprint.status === "ACTIVE"
-      ? "Active"
-      : "Completed",
 
-  duration: `${new Date(sprint.startDate).toLocaleDateString()} - ${new Date(
-    sprint.endDate
-  ).toLocaleDateString()}`,
-
-  startDate: sprint.startDate,
-  endDate: sprint.endDate,
-  capacity: sprint.capacity
-});
-
-const mapBackendTicketToUi = (ticket: any) => ({
-  id: ticket.id,
-  title: ticket.title,
-  description: ticket.description || "",
-  status:
-    ticket.status === "TODO"
-      ? "Backlog"
-      : ticket.status === "IN_PROGRESS"
-      ? "In Progress"
-      : ticket.status === "DONE"
-      ? "Done"
-      : ticket.status === "BLOCKED"
-      ? "Blocked"
-      : "Backlog",
-
-  priority:
-    ticket.priority === "LOW"
-      ? "Low"
-      : ticket.priority === "HIGH"
-      ? "High"
-      : "Medium",
-
-  assignee: ticket.assignedTo?.fullName || "Sin asignar",
-
-  estimation: ticket.storyPoints || 0,
-
-  sprintId: ticket.sprintId,
-
-  parentTicketId: ticket.parentTicketId || null,
-
-  startDate: ticket.createdAt,
-  endDate: ticket.completedAt || null
-});
-
-interface BackendProject {
-  id: string;
-  name: string;
-  code: string;
-  description: string | null;
-  status: 'ACTIVE' | 'ON_HOLD' | 'COMPLETED' | 'ARCHIVED';
-  riskLevel: 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
-  startDate: string;
-  targetEndDate: string;
-  actualEndDate: string | null;
-  budget: number | null;
-  createdAt: string;
-  updatedAt: string;
-  pm: {
-    id: string;
-    fullName: string;
-    email: string;
-    role: string;
-  } | null;
-  createdBy: {
-    id: string;
-    fullName: string;
-    email: string;
-    role: string;
-  };
-  members: Array<{
-    id: string;
-    fullName: string;
-    email: string;
-    role: string;
-    avatarUrl: string | null;
-  }>;
-  stats: {
-    membersCount: number;
-    sprintsCount: number;
-    ticketsCount: number;
-  };
-}
-
-const formatBackendStatus = (status?: BackendProject['status']) => {
-  switch (status) {
-    case 'ACTIVE':
-      return 'Active';
-    case 'ON_HOLD':
-      return 'On Hold';
-    case 'COMPLETED':
-      return 'Completed';
-    case 'ARCHIVED':
-      return 'Archived';
-    default:
-      return 'N/A';
-  }
-};
-
-const formatBackendRisk = (risk?: BackendProject['riskLevel']) => {
-  switch (risk) {
-    case 'LOW':
-      return 'Low';
-    case 'MEDIUM':
-      return 'Medium';
-    case 'HIGH':
-      return 'High';
-    case 'CRITICAL':
-      return 'High';
-    default:
-      return 'N/A';
-  }
-};
-
-const formatDateLabel = (value?: string | null) => {
-  if (!value) return 'N/A';
-
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return 'N/A';
-
-  return date.toLocaleDateString('es-MX', {
-    year: 'numeric',
-    month: 'short',
-    day: 'numeric',
-  });
-};
-
-const formatMoneyLabel = (value?: number | null) => {
-  if (value === null || value === undefined) return 'N/A';
-
-  return new Intl.NumberFormat('es-MX', {
-    style: 'currency',
-    currency: 'MXN',
-    maximumFractionDigits: 2,
-  }).format(value);
-};
-
-const safeText = (value?: string | null) => {
-  if (!value || !String(value).trim()) return 'N/A';
-  return value;
-};
 export function ProjectDetail() {
 const {
   id
@@ -183,6 +45,38 @@ const [loadingAgile, setLoadingAgile] = useState(false);
 const [availableDevelopers, setAvailableDevelopers] = useState<any[]>([]);
 const [selectedDeveloperId, setSelectedDeveloperId] = useState("");
 const [loadingDevelopers, setLoadingDevelopers] = useState(false);
+
+
+const [dashboard, setDashboard] = useState<any>(null);
+
+const mapDashboardRiskToUi = (risk?: string) => {
+  switch (risk) {
+    case "HIGH":
+      return "High";
+    case "MEDIUM":
+      return "Medium";
+    case "LOW":
+      return "Low";
+    default:
+      return "Low";
+  }
+};
+
+const loadDashboard = async () => {
+  if (!id) return;
+
+  try {
+const data = await authFetch(`/analytics/project/${id}/dashboard`);
+console.log("DASHBOARD DATA:", data);
+setDashboard(data);
+  } catch (error) {
+    console.error(error);
+  }
+};
+
+useEffect(() => {
+  loadDashboard();
+}, [id]);
 
 useEffect(() => {
   if (!id) return;
@@ -229,6 +123,26 @@ const backendProject = backendProjects.find(p => p.id === id) || null;
 
 const project = useMemo(() => {
   const mapTeamFromMembers = (members?: BackendProject['members']) => {
+    if (dashboard?.teamMetrics?.length) {
+      return dashboard.teamMetrics.map((member: any) => ({
+        id: member.id,
+        name: member.name || 'N/A',
+        role: member.role || 'Developer',
+        email: member.email || 'N/A',
+        avatar:
+          member.name
+            ?.split(' ')
+            .filter(Boolean)
+            .map((part: string) => part[0])
+            .join('')
+            .slice(0, 2)
+            .toUpperCase() || 'NA',
+        tasksAssigned: member.tasksAssigned ?? 0,
+        performance: member.performance ?? 0,
+        status: member.status || 'Active',
+      }));
+    }
+
     if (!members || members.length === 0) return [];
 
     return members.map((m) => ({
@@ -260,7 +174,7 @@ const project = useMemo(() => {
       description: safeText(backendProject.description),
 
       status: formatBackendStatus(backendProject.status),
-      risk: formatBackendRisk(backendProject.riskLevel),
+      risk: dashboard?.kpis?.risk ? mapDashboardRiskToUi(dashboard.kpis.risk) : formatBackendRisk(backendProject.riskLevel),
 
       startDate: backendProject.startDate ?? null,
       targetEndDate: backendProject.targetEndDate ?? null,
@@ -328,19 +242,22 @@ const project = useMemo(() => {
       sprintsCountLabel: backendProject.stats?.sprintsCount ?? 'N/A',
       ticketsCountLabel: backendProject.stats?.ticketsCount ?? 'N/A',
 
-      progress: 0,
-      progressLabel: 'N/A',
-      scheduleVariance: 0,
-      spi: 0,
-      delayedMilestones: 'N/A',
-      blockedTickets: 'N/A',
+      progress: dashboard?.kpis?.progress ?? 0,
+      progressLabel:
+        dashboard?.kpis?.progress !== undefined && dashboard?.kpis?.progress !== null
+          ? `${dashboard.kpis.progress}%`
+          : '0%',
+      scheduleVariance: dashboard?.kpis?.scheduleVariance ?? 0,
+      spi: dashboard?.kpis?.spi ?? 1,
+      delayedMilestones: dashboard?.kpis?.delayedMilestones ?? 0,
+      blockedTickets: dashboard?.kpis?.blockedTickets ?? 0,
       teamVelocity: 'N/A',
       openRisks: 'N/A',
 
 sprints: realSprints.map(mapBackendSprintToUi),
 tickets: realTickets.map(mapBackendTicketToUi),
       notifications: [],
-      progressHistory: [{ date: 'Real', planned: 0, actual: 0 }],
+      progressHistory: dashboard?.progressHistory?.length ? dashboard.progressHistory : [{ date: 'Real', planned: 0, actual: 0 }],
 
       closedDate: backendProject.actualEndDate
         ? new Date(backendProject.actualEndDate).toISOString().split('T')[0]
@@ -358,7 +275,7 @@ tickets: realTickets.map(mapBackendTicketToUi),
     description: safeText(backendProject?.description),
 
     status: formatBackendStatus(backendProject?.status),
-    risk: formatBackendRisk(backendProject?.riskLevel),
+    risk: dashboard?.kpis?.risk ? mapDashboardRiskToUi(dashboard.kpis.risk) : formatBackendRisk(backendProject?.riskLevel),
 
     startDate: backendProject?.startDate ?? null,
     targetEndDate: backendProject?.targetEndDate ?? null,
@@ -434,26 +351,29 @@ tickets: realTickets.map(mapBackendTicketToUi),
     sprintsCountLabel: backendProject?.stats?.sprintsCount ?? 'N/A',
     ticketsCountLabel: backendProject?.stats?.ticketsCount ?? 'N/A',
 
-    progress: 0,
-    progressLabel: 'N/A',
-    scheduleVariance: 0,
-    spi: 0,
-    delayedMilestones: 'N/A',
-    blockedTickets: 'N/A',
+    progress: dashboard?.kpis?.progress ?? 0,
+    progressLabel:
+      dashboard?.kpis?.progress !== undefined && dashboard?.kpis?.progress !== null
+        ? `${dashboard.kpis.progress}%`
+        : '0%',
+    scheduleVariance: dashboard?.kpis?.scheduleVariance ?? 0,
+    spi: dashboard?.kpis?.spi ?? 1,
+    delayedMilestones: dashboard?.kpis?.delayedMilestones ?? 0,
+    blockedTickets: dashboard?.kpis?.blockedTickets ?? 0,
     teamVelocity: 'N/A',
     openRisks: 'N/A',
 
 sprints: realSprints.map(mapBackendSprintToUi),
 tickets: realTickets.map(mapBackendTicketToUi),
     notifications: [],
-    progressHistory: [{ date: 'Real', planned: 0, actual: 0 }],
+    progressHistory: dashboard?.progressHistory?.length ? dashboard.progressHistory : [{ date: 'Real', planned: 0, actual: 0 }],
 
     closedDate: backendProject?.actualEndDate
       ? new Date(backendProject.actualEndDate).toISOString().split('T')[0]
       : 'N/A',
     closedBy: 'N/A',
   };
-}, [mockProject, backendProject, realSprints, realTickets]);
+}, [mockProject, backendProject, realSprints, realTickets, dashboard]);
   const [showProgressModal, setShowProgressModal] = useState(false);
   const [showSprintModal, setShowSprintModal] = useState(false);
   const [showTicketModal, setShowTicketModal] = useState(false);
@@ -674,6 +594,7 @@ const handleCreateSprint = async () => {
 
     const data = await authFetch(`/sprints/project/${id}`);
     setRealSprints(data.sprints);
+    await loadDashboard();
 
     setShowSprintModal(false);
   } catch (error:any) {
@@ -710,6 +631,8 @@ const handleCreateTicket = async () => {
     });
 
     setRealTickets((prev) => [response.ticket, ...prev]);
+
+    await loadDashboard();
 
     setShowTicketModal(false);
 
@@ -814,6 +737,7 @@ const handleAddDeveloper = async () => {
 
     const data = await authFetch<{ projects: BackendProject[] }>("/projects");
     setBackendProjects(data.projects || []);
+    await loadDashboard();
 
     setShowAddDeveloperModal(false);
     setSelectedDeveloperId("");
@@ -832,6 +756,7 @@ const handleCompleteSprint = async () => {
 
     const data = await authFetch(`/sprints/project/${id}`);
     setRealSprints(data.sprints);
+    await loadDashboard();
 
     setShowCompleteSprintModal(false);
 
@@ -899,6 +824,8 @@ const handleTicketUpdate = async (ticketId: string, updates: any) => {
         ticket.id === ticketId ? statusResponse.ticket : ticket
       )
     );
+
+    await loadDashboard();
 
     setSelectedTicket(null);
   } catch (error: any) {
@@ -1165,7 +1092,7 @@ if (projectLoadError && !backendProject) {
                     </div>
                     {project.scheduleVariance >= 0 ? <TrendingUp className="w-4 h-4 text-green-500" /> : <TrendingDown className="w-4 h-4 text-[#FF3B30]" />}
                   </div>
-                  <p className="text-3xl font-bold text-white mb-1">N/A</p>
+                  <p className="text-3xl font-bold text-white mb-1">{project.scheduleVariance}</p>
                   <p className="text-sm text-[#8E8E93]">Schedule Variance</p>
                 </div>
 
@@ -1177,7 +1104,7 @@ if (projectLoadError && !backendProject) {
                     </div>
                     {project.spi >= 1 ? <TrendingUp className="w-4 h-4 text-green-500" /> : <TrendingDown className="w-4 h-4 text-[#FF3B30]" />}
                   </div>
-                <p className="text-3xl font-bold text-white mb-1">N/A</p>
+                <p className="text-3xl font-bold text-white mb-1">{project.spi}</p>
                   <p className="text-sm text-[#8E8E93]">SPI</p>
                 </div>
 

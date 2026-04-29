@@ -10,6 +10,7 @@ const userRoutes = require("./routes/user.routes");
 const projectRoutes = require("./routes/project.routes");
 const sprintRoutes = require("./routes/sprint.routes");
 const ticketRoutes = require("./routes/ticket.routes");
+const analyticsRoutes = require("./routes/analytics.routes");
 
 dotenv.config();
 
@@ -41,6 +42,6 @@ app.use("/users", userRoutes);
 app.use("/projects", projectRoutes);
 app.use("/sprints", sprintRoutes);
 app.use("/tickets", ticketRoutes);
-
+app.use("/analytics", analyticsRoutes);
 
 module.exports = app;
