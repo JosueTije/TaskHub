@@ -57,6 +57,9 @@ async function createTicket({
   parentTicketId,
   userId,
   role,
+  startDate,
+dueDate,
+actualHours,
 }) {
   if (!sprintId || !title) {
     throw new Error("sprintId y title son obligatorios");
@@ -128,6 +131,12 @@ async function createTicket({
         estimatedHours !== undefined && estimatedHours !== null
           ? Number(estimatedHours)
           : null,
+      startDate: startDate ? new Date(startDate) : null,
+dueDate: dueDate ? new Date(dueDate) : null,
+actualHours:
+  actualHours !== undefined && actualHours !== null
+    ? Number(actualHours)
+    : null,
     },
     include: {
       assignedTo: {
@@ -267,6 +276,9 @@ async function updateTicket({
   estimatedHours,
   userId,
   role,
+  startDate,
+dueDate,
+actualHours,
 }) {
   if (!["ADMIN", "PM"].includes(role)) {
     throw new Error("No tienes permisos para editar tickets");
@@ -321,6 +333,24 @@ async function updateTicket({
         estimatedHours !== undefined && estimatedHours !== null
           ? Number(estimatedHours)
           : undefined,
+        startDate:
+  startDate !== undefined
+    ? startDate
+      ? new Date(startDate)
+      : null
+    : undefined,
+
+dueDate:
+  dueDate !== undefined
+    ? dueDate
+      ? new Date(dueDate)
+      : null
+    : undefined,
+
+actualHours:
+  actualHours !== undefined && actualHours !== null
+    ? Number(actualHours)
+    : undefined,
     },
     include: {
       assignedTo: {
