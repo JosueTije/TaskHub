@@ -37,35 +37,69 @@ async function getProjectDashboard({ projectId }) {
 
   const today = new Date();
 
-  const blocked = tickets.filter((t) => t.status === "BLOCKED").length;
+  // ===============================
+  // Basic Counters
+  // ===============================
+  const blocked = tickets.filter(
+    (ticket) => ticket.status === "BLOCKED"
+  ).length;
 
-  const delayedTickets = tickets.filter((t) => {
-    if (!t.dueDate) return false;
+  const delayedTickets = tickets.filter((ticket) => {
+    if (!ticket.dueDate) return false;
 
     return (
-      new Date(t.dueDate) < today &&
-      !["DONE", "CANCELLED"].includes(t.status)
+      new Date(ticket.dueDate) < today &&
+      !["DONE", "CANCELLED"].includes(ticket.status)
     );
   }).length;
 
   // ===============================
-  // Real progress by story points
+  // Story Points Progress
   // ===============================
   const totalStoryPoints = tickets.reduce(
-    (sum, t) => sum + (t.storyPoints || 0),
+    (sum, ticket) => sum + (ticket.storyPoints || 0),
     0
   );
 
-  const doneStoryPoints = tickets
-    .filter((t) => t.status === "DONE")
-    .reduce((sum, t) => sum + (t.storyPoints || 0), 0);
+  const completedStoryPoints = tickets
+    .filter((ticket) => ticket.status === "DONE")
+    .reduce(
+      (sum, ticket) => sum + (ticket.storyPoints || 0),
+      0
+    );
 
   const progress = totalStoryPoints
-    ? Math.round((doneStoryPoints / totalStoryPoints) * 100)
+    ? Math.round(
+        (completedStoryPoints / totalStoryPoints) * 100
+      )
     : 0;
 
   // ===============================
-  // Planned progress by project dates
+  // Hours Metrics
+  // ===============================
+  const estimatedHours = tickets.reduce(
+    (sum, ticket) => sum + (ticket.estimatedHours || 0),
+    0
+  );
+
+  const actualHours = tickets
+    .filter((ticket) => ticket.status === "DONE")
+    .reduce(
+      (sum, ticket) => sum + (ticket.actualHours || 0),
+      0
+    );
+
+  const hoursVariance = actualHours - estimatedHours;
+
+  const efficiency =
+    actualHours > 0
+      ? Number(
+          (estimatedHours / actualHours).toFixed(2)
+        )
+      : 1;
+
+  // ===============================
+  // Planned Progress by Dates
   // ===============================
   let plannedProgress = 0;
 
@@ -73,106 +107,197 @@ async function getProjectDashboard({ projectId }) {
     const start = new Date(project.startDate);
     const end = new Date(project.targetEndDate);
 
-    const totalDays = Math.max(1, daysBetween(start, end));
+    const totalDays = Math.max(
+      1,
+      daysBetween(start, end)
+    );
+
     const elapsedDays = daysBetween(start, today);
 
     plannedProgress = clamp(
-      Math.round((elapsedDays / totalDays) * 100),
+      Math.round(
+        (elapsedDays / totalDays) * 100
+      ),
       0,
       100
     );
   }
 
-  const scheduleVariance = progress - plannedProgress;
+  const scheduleVariance =
+    progress - plannedProgress;
 
   const spi =
     plannedProgress > 0
-      ? Number((progress / plannedProgress).toFixed(2))
+      ? Number(
+          (progress / plannedProgress).toFixed(2)
+        )
       : 1;
 
   // ===============================
-  // Risk logic
+  // Risk
   // ===============================
   let risk = "LOW";
 
-  if (delayedTickets >= 3 || blocked >= 3 || spi < 0.8) {
+  if (
+    delayedTickets >= 3 ||
+    blocked >= 3 ||
+    spi < 0.8
+  ) {
     risk = "HIGH";
-  } else if (delayedTickets >= 1 || blocked >= 1 || spi < 1) {
+  } else if (
+    delayedTickets >= 1 ||
+    blocked >= 1 ||
+    spi < 1
+  ) {
     risk = "MEDIUM";
   }
 
   // ===============================
   // Progress History by Sprint
   // ===============================
-  let completedStoryPointsAccum = 0;
+  let completedAccum = 0;
 
-  const progressHistory = sprints.map((sprint, index) => {
-    const sprintTickets = tickets.filter(
-      (t) => t.sprintId === sprint.id
-    );
+  const progressHistory = sprints.map(
+    (sprint, index) => {
+      const sprintTickets = tickets.filter(
+        (ticket) =>
+          ticket.sprintId === sprint.id
+      );
 
-    const sprintDoneStoryPoints = sprintTickets
-      .filter((t) => t.status === "DONE")
-      .reduce((sum, t) => sum + (t.storyPoints || 0), 0);
+      const sprintCompleted =
+        sprintTickets
+          .filter(
+            (ticket) =>
+              ticket.status === "DONE"
+          )
+          .reduce(
+            (sum, ticket) =>
+              sum +
+              (ticket.storyPoints || 0),
+            0
+          );
 
-    completedStoryPointsAccum += sprintDoneStoryPoints;
+      completedAccum += sprintCompleted;
 
-    const actual = totalStoryPoints
-      ? Math.round((completedStoryPointsAccum / totalStoryPoints) * 100)
-      : 0;
+      const actual = totalStoryPoints
+        ? Math.round(
+            (completedAccum /
+              totalStoryPoints) *
+              100
+          )
+        : 0;
 
-    const planned = sprints.length
-      ? Math.round(((index + 1) / sprints.length) * 100)
-      : 0;
+      const planned = sprints.length
+        ? Math.round(
+            ((index + 1) /
+              sprints.length) *
+              100
+          )
+        : 0;
 
-    return {
-      date: sprint.name,
-      planned,
-      actual,
-    };
-  });
+      return {
+        date: sprint.name,
+        planned,
+        actual,
+      };
+    }
+  );
 
   // ===============================
   // Team Metrics
   // ===============================
-  const teamMetrics = members.map((member) => {
-    const userTickets = tickets.filter(
-      (t) => t.assignedToId === member.userId
-    );
+  const teamMetrics = members.map(
+    (member) => {
+      const userTickets = tickets.filter(
+        (ticket) =>
+          ticket.assignedToId ===
+          member.userId
+      );
 
-    const userTotalStoryPoints = userTickets.reduce(
-      (sum, t) => sum + (t.storyPoints || 0),
-      0
-    );
+      const userEstimated =
+        userTickets.reduce(
+          (sum, ticket) =>
+            sum +
+            (ticket.estimatedHours ||
+              0),
+          0
+        );
 
-    const userDoneStoryPoints = userTickets
-      .filter((t) => t.status === "DONE")
-      .reduce((sum, t) => sum + (t.storyPoints || 0), 0);
+      const userActual = userTickets
+        .filter(
+          (ticket) =>
+            ticket.status === "DONE"
+        )
+        .reduce(
+          (sum, ticket) =>
+            sum +
+            (ticket.actualHours || 0),
+          0
+        );
 
-    const performance = userTotalStoryPoints
-      ? Math.round((userDoneStoryPoints / userTotalStoryPoints) * 100)
-      : 0;
+      const userStoryTotal =
+        userTickets.reduce(
+          (sum, ticket) =>
+            sum +
+            (ticket.storyPoints || 0),
+          0
+        );
 
-    return {
-      id: member.user.id,
-      name: member.user.fullName,
-      tasksAssigned: userTickets.length,
-      performance,
-      status: "Active",
-    };
-  });
+      const userStoryDone =
+        userTickets
+          .filter(
+            (ticket) =>
+              ticket.status === "DONE"
+          )
+          .reduce(
+            (sum, ticket) =>
+              sum +
+              (ticket.storyPoints || 0),
+            0
+          );
+
+      const performance =
+        userStoryTotal > 0
+          ? Math.round(
+              (userStoryDone /
+                userStoryTotal) *
+                100
+            )
+          : 0;
+
+      return {
+        id: member.user.id,
+        name: member.user.fullName,
+        tasksAssigned:
+          userTickets.length,
+        performance,
+        estimatedHours:
+          userEstimated,
+        actualHours: userActual,
+        status: "Active",
+      };
+    }
+  );
 
   return {
     kpis: {
       progress,
       plannedProgress,
-      completedStoryPoints: doneStoryPoints,
+      completedStoryPoints,
       totalStoryPoints,
+
       blockedTickets: blocked,
-      delayedMilestones: delayedTickets,
+      delayedMilestones:
+        delayedTickets,
+
       scheduleVariance,
       spi,
       risk,
+
+      estimatedHours,
+      actualHours,
+      hoursVariance,
+      efficiency,
     },
 
     progressHistory,

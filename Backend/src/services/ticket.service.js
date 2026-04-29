@@ -54,12 +54,12 @@ async function createTicket({
   storyPoints,
   assignedToId,
   estimatedHours,
+  actualHours,
+  startDate,
+  dueDate,
   parentTicketId,
   userId,
   role,
-  startDate,
-dueDate,
-actualHours,
 }) {
   if (!sprintId || !title) {
     throw new Error("sprintId y title son obligatorios");
@@ -67,6 +67,10 @@ actualHours,
 
   if (!["ADMIN", "PM"].includes(role)) {
     throw new Error("No tienes permisos para crear tickets");
+  }
+
+  if (startDate && dueDate && new Date(dueDate) < new Date(startDate)) {
+    throw new Error("La fecha límite no puede ser anterior a la fecha de inicio");
   }
 
   const sprint = await prisma.sprint.findUnique({
@@ -92,11 +96,14 @@ actualHours,
         projectId: sprint.projectId,
         userId: assignedToId,
         leftAt: null,
+        user: {
+          role: "DEVELOPER",
+        },
       },
     });
 
     if (!member) {
-      throw new Error("El usuario asignado no pertenece al proyecto");
+      throw new Error("El usuario asignado debe ser developer y pertenecer al proyecto");
     }
   }
 
@@ -127,16 +134,16 @@ actualHours,
           : null,
       assignedToId: assignedToId || null,
       createdById: userId,
+      startDate: startDate ? new Date(startDate) : null,
+      dueDate: dueDate ? new Date(dueDate) : null,
       estimatedHours:
         estimatedHours !== undefined && estimatedHours !== null
           ? Number(estimatedHours)
           : null,
-      startDate: startDate ? new Date(startDate) : null,
-dueDate: dueDate ? new Date(dueDate) : null,
-actualHours:
-  actualHours !== undefined && actualHours !== null
-    ? Number(actualHours)
-    : null,
+      actualHours:
+        actualHours !== undefined && actualHours !== null
+          ? Number(actualHours)
+          : null,
     },
     include: {
       assignedTo: {
@@ -274,11 +281,11 @@ async function updateTicket({
   storyPoints,
   assignedToId,
   estimatedHours,
+  actualHours,
+  startDate,
+  dueDate,
   userId,
   role,
-  startDate,
-dueDate,
-actualHours,
 }) {
   if (!["ADMIN", "PM"].includes(role)) {
     throw new Error("No tienes permisos para editar tickets");
@@ -300,17 +307,24 @@ actualHours,
     role,
   });
 
+  if (startDate && dueDate && new Date(dueDate) < new Date(startDate)) {
+    throw new Error("La fecha límite no puede ser anterior a la fecha de inicio");
+  }
+
   if (assignedToId) {
     const member = await prisma.projectMember.findFirst({
       where: {
         projectId: ticket.projectId,
         userId: assignedToId,
         leftAt: null,
+        user: {
+          role: "DEVELOPER",
+        },
       },
     });
 
     if (!member) {
-      throw new Error("El usuario asignado no pertenece al proyecto");
+      throw new Error("El usuario asignado debe ser developer y pertenecer al proyecto");
     }
   }
 
@@ -329,28 +343,22 @@ actualHours,
           : undefined,
       assignedToId:
         assignedToId !== undefined ? assignedToId || null : undefined,
+      startDate:
+        startDate !== undefined
+          ? startDate
+            ? new Date(startDate)
+            : null
+          : undefined,
+      dueDate:
+        dueDate !== undefined ? (dueDate ? new Date(dueDate) : null) : undefined,
       estimatedHours:
         estimatedHours !== undefined && estimatedHours !== null
           ? Number(estimatedHours)
           : undefined,
-        startDate:
-  startDate !== undefined
-    ? startDate
-      ? new Date(startDate)
-      : null
-    : undefined,
-
-dueDate:
-  dueDate !== undefined
-    ? dueDate
-      ? new Date(dueDate)
-      : null
-    : undefined,
-
-actualHours:
-  actualHours !== undefined && actualHours !== null
-    ? Number(actualHours)
-    : undefined,
+      actualHours:
+        actualHours !== undefined && actualHours !== null
+          ? Number(actualHours)
+          : undefined,
     },
     include: {
       assignedTo: {
@@ -369,13 +377,27 @@ actualHours:
           role: true,
         },
       },
+      sprint: {
+        select: {
+          id: true,
+          name: true,
+          status: true,
+        },
+      },
+      project: {
+        select: {
+          id: true,
+          name: true,
+          code: true,
+        },
+      },
     },
   });
 
   return updatedTicket;
 }
 
-async function updateTicketStatus({ ticketId, status, userId, role }) {
+async function updateTicketStatus({ ticketId, status, actualHours, userId, role }) {
   const validStatuses = [
     "TODO",
     "IN_PROGRESS",
@@ -405,17 +427,24 @@ async function updateTicketStatus({ ticketId, status, userId, role }) {
     role,
   });
 
+  const isMovingToInProgress = status === "IN_PROGRESS" && !ticket.startedAt;
+  const isMovingToDone = status === "DONE";
+  const isLeavingDone = ticket.status === "DONE" && status !== "DONE";
+
   const updatedTicket = await prisma.ticket.update({
     where: {
       id: ticketId,
     },
     data: {
       status,
-      startedAt:
-        status === "IN_PROGRESS" && !ticket.startedAt
-          ? new Date()
-          : ticket.startedAt,
-      completedAt: status === "DONE" ? new Date() : null,
+      startedAt: isMovingToInProgress ? new Date() : ticket.startedAt,
+      completedAt: isMovingToDone ? new Date() : isLeavingDone ? null : ticket.completedAt,
+      actualHours:
+        actualHours !== undefined && actualHours !== null
+          ? Number(actualHours)
+          : isLeavingDone
+          ? null
+          : ticket.actualHours,
     },
     include: {
       assignedTo: {
@@ -432,6 +461,20 @@ async function updateTicketStatus({ ticketId, status, userId, role }) {
           fullName: true,
           email: true,
           role: true,
+        },
+      },
+      sprint: {
+        select: {
+          id: true,
+          name: true,
+          status: true,
+        },
+      },
+      project: {
+        select: {
+          id: true,
+          name: true,
+          code: true,
         },
       },
     },
