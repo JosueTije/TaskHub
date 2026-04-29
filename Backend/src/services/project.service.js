@@ -281,7 +281,70 @@ async function getProjects({ userId, role }) {
   }));
 }
 
+async function addProjectMember({ projectId, userId, currentUserId, role }) {
+  if (!["ADMIN", "PM"].includes(role)) {
+    throw new Error("No tienes permisos para agregar developers");
+  }
+
+  const project = await prisma.project.findUnique({
+    where: { id: projectId },
+  });
+
+  if (!project) {
+    throw new Error("Proyecto no encontrado");
+  }
+
+  if (role === "PM" && project.pmId !== currentUserId) {
+    throw new Error("Solo el PM asignado puede agregar miembros");
+  }
+
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+  });
+
+  if (!user) {
+    throw new Error("Usuario no encontrado");
+  }
+
+  if (user.role !== "DEVELOPER") {
+    throw new Error("Solo puedes agregar usuarios con rol DEVELOPER");
+  }
+
+  const existingMember = await prisma.projectMember.findFirst({
+    where: {
+      projectId,
+      userId,
+      leftAt: null,
+    },
+  });
+
+  if (existingMember) {
+    throw new Error("Este developer ya pertenece al proyecto");
+  }
+
+  const member = await prisma.projectMember.create({
+    data: {
+      projectId,
+      userId,
+    },
+    include: {
+      user: {
+        select: {
+          id: true,
+          fullName: true,
+          email: true,
+          role: true,
+          avatarUrl: true,
+        },
+      },
+    },
+  });
+
+  return member;
+}
+
 module.exports = {
   createProject,
   getProjects,
+  addProjectMember
 };

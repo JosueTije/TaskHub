@@ -1,5 +1,28 @@
 const { createProject, getProjects } = require("../services/project.service");
+const { addProjectMember } = require("../services/project.service");
 
+async function addProjectMemberController(req, res) {
+  try {
+    const { projectId } = req.params;
+    const { userId } = req.body;
+
+    const member = await addProjectMember({
+      projectId,
+      userId,
+      currentUserId: req.user.sub,
+      role: req.user.role,
+    });
+
+    return res.status(201).json({
+      message: "Developer agregado correctamente",
+      member,
+    });
+  } catch (error) {
+    return res.status(400).json({
+      message: error.message || "Error al agregar developer",
+    });
+  }
+}
 async function createProjectController(req, res) {
   try {
     const {
@@ -59,4 +82,5 @@ async function getProjectsController(req, res) {
 module.exports = {
   createProjectController,
   getProjectsController,
+  addProjectMemberController
 };
