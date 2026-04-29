@@ -8,7 +8,7 @@ const authRoutes = require("./routes/auth.routes");
 const adminRoutes = require("./routes/admin.routes");
 const userRoutes = require("./routes/user.routes");
 const projectRoutes = require("./routes/project.routes");
-
+const sprintRoutes = require("./routes/sprint.routes");
 
 dotenv.config();
 
@@ -38,5 +38,6 @@ app.use("/auth", authRoutes);
 app.use("/admin", adminRoutes);
 app.use("/users", userRoutes);
 app.use("/projects", projectRoutes);
+app.use("/sprints", sprintRoutes);
 
 module.exports = app;

@@ -1,26 +1,33 @@
-const { Resend } = require("resend");
-
-const resend = new Resend(process.env.RESEND_API_KEY);
+const emailjs = require("@emailjs/nodejs");
 
 async function sendOtpEmail({ to, fullName, otp }) {
-  const result = await resend.emails.send({
-    from: process.env.MAIL_FROM || "TaskHub <onboarding@resend.dev>",
-    to,
-    subject: "Código de verificación TaskHub",
-    html: `
-      <h2>Hola ${fullName}</h2>
-      <p>Tu código de verificación es:</p>
-      <h1>${otp}</h1>
-      <p>Este código vence en 10 minutos.</p>
-    `,
-  });
-
-  console.log("Resend result:", result);
-
-  if (result.error) {
-    throw new Error(result.error.message);
+  if (
+    !process.env.EMAILJS_SERVICE_ID ||
+    !process.env.EMAILJS_TEMPLATE_ID ||
+    !process.env.EMAILJS_PUBLIC_KEY
+  ) {
+    console.log("EmailJS no configurado. OTP:", otp);
+    return;
   }
 
+  const templateParams = {
+    email: to,
+    to_email: to,
+    fullName,
+    otp,
+    appName: "TaskHub",
+  };
+
+  const result = await emailjs.send(
+    process.env.EMAILJS_SERVICE_ID,
+    process.env.EMAILJS_TEMPLATE_ID,
+    templateParams,
+    {
+      publicKey: process.env.EMAILJS_PUBLIC_KEY,
+    }
+  );
+
+  console.log("EmailJS result:", result);
   return result;
 }
 
