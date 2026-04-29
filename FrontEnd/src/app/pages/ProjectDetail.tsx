@@ -11,6 +11,8 @@ import { useAuth } from '../contexts/AuthContext';
 import { TicketDetailModal } from '../components/TicketDetailModal';
 import { authFetch } from '../../services/api';
 
+
+
 const mapBackendSprintToUi = (sprint: any) => ({
   id: sprint.id,
   name: sprint.name,
@@ -177,6 +179,10 @@ const [projectLoadError, setProjectLoadError] = useState('');
 const [realSprints, setRealSprints] = useState<any[]>([]);
 const [realTickets, setRealTickets] = useState<any[]>([]);
 const [loadingAgile, setLoadingAgile] = useState(false);
+
+const [availableDevelopers, setAvailableDevelopers] = useState<any[]>([]);
+const [selectedDeveloperId, setSelectedDeveloperId] = useState("");
+const [loadingDevelopers, setLoadingDevelopers] = useState(false);
 
 useEffect(() => {
   if (!id) return;
@@ -454,6 +460,34 @@ tickets: realTickets.map(mapBackendTicketToUi),
   const [showScenarioPanel, setShowScenarioPanel] = useState(false);
   const [showRecoveryPanel, setShowRecoveryPanel] = useState(false);
   const [showAddDeveloperModal, setShowAddDeveloperModal] = useState(false);
+
+  useEffect(() => {
+  if (!showAddDeveloperModal) return;
+
+  const loadDevelopers = async () => {
+    try {
+      setLoadingDevelopers(true);
+
+      const data = await authFetch("/users/developers");
+
+      const projectMemberIds = new Set(
+        (project?.members || []).map((member: any) => member.id)
+      );
+
+      const filteredDevelopers = (data.developers || []).filter(
+        (developer: any) => !projectMemberIds.has(developer.id)
+      );
+
+      setAvailableDevelopers(filteredDevelopers);
+    } catch (error: any) {
+      alert(error.message || "No se pudieron cargar los developers");
+    } finally {
+      setLoadingDevelopers(false);
+    }
+  };
+
+  loadDevelopers();
+}, [showAddDeveloperModal, project?.members]);
   const [showCloseProjectModal, setShowCloseProjectModal] = useState(false);
   const [showCompleteSprintModal, setShowCompleteSprintModal] = useState(false);
   const [selectedTicket, setSelectedTicket] = useState<Ticket | null>(null);
@@ -729,15 +763,29 @@ const handleCreateTicket = async () => {
       description: ''
     }]);
   };
-  const handleAddDeveloper = () => {
-    console.log('Developer added:', developerData);
-    setShowAddDeveloperModal(false);
-    setDeveloperData({
-      name: '',
-      email: '',
-      role: ''
+const handleAddDeveloper = async () => {
+  try {
+    if (!selectedDeveloperId) {
+      alert("Selecciona un developer");
+      return;
+    }
+
+    await authFetch(`/projects/${id}/members`, {
+      method: "POST",
+      body: JSON.stringify({
+        userId: selectedDeveloperId,
+      }),
     });
-  };
+
+    const data = await authFetch<{ projects: BackendProject[] }>("/projects");
+    setBackendProjects(data.projects || []);
+
+    setShowAddDeveloperModal(false);
+    setSelectedDeveloperId("");
+  } catch (error: any) {
+    alert(error.message || "No se pudo agregar el developer");
+  }
+};
 const handleCompleteSprint = async () => {
   try {
     await authFetch(`/sprints/${sprintFilter}/status`, {
@@ -2531,16 +2579,23 @@ if (projectLoadError && !backendProject) {
                       <label className="block text-xs font-medium text-white mb-1">
                         Asignado a <span className="text-[#FF3B30]">*</span>
                       </label>
-                      <select value={subTicket.assignee} onChange={e => {
-                  const updated = [...subTicketsData];
-                  updated[index].assignee = e.target.value;
-                  setSubTicketsData(updated);
-                }} className="w-full px-3 py-2 bg-[#1C1C1E] border border-white/10 rounded-lg text-white text-sm focus:border-[#FF3B30] focus:ring-1 focus:ring-[#FF3B30] outline-none transition-all">
-                        <option value="">Seleccionar</option>
-                        {project.team.map(member => <option key={member.id} value={member.name}>
-                            {member.name}
-                          </option>)}
-                      </select>
+         <select
+  value={subTicket.assignee}
+  onChange={(e) => {
+    const updated = [...subTicketsData];
+    updated[index].assignee = e.target.value;
+    setSubTicketsData(updated);
+  }}
+  className="w-full px-3 py-2 bg-[#1C1C1E] border border-white/10 rounded-lg text-white text-sm focus:border-[#FF3B30] focus:ring-1 focus:ring-[#FF3B30] outline-none transition-all"
+>
+  <option value="">Sin asignar</option>
+
+  {project.members?.map((member) => (
+    <option key={member.id} value={member.id}>
+      {member.fullName}
+    </option>
+  ))}
+</select>
                     </div>
 
                     {}
@@ -3373,52 +3428,74 @@ if (projectLoadError && !backendProject) {
         </div>}
 
       {}
-      {showAddDeveloperModal && <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="bg-[#1C1C1E] border border-white/10 rounded-xl p-6 max-w-md w-full">
-            <h3 className="text-xl font-semibold text-white mb-6">Agregar Desarrollador</h3>
-            
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-white mb-2">
-                  Nombre
-                </label>
-                <input type="text" placeholder="Ej: Juan Pérez" value={developerData.name} onChange={e => setDeveloperData({
-              ...developerData,
-              name: e.target.value
-            })} className="w-full px-4 py-3 bg-[#0F0F0F] border border-white/10 rounded-lg text-white placeholder-[#8E8E93] focus:border-[#FF3B30] focus:ring-1 focus:ring-[#FF3B30] outline-none transition-all" />
-              </div>
-              
-              <div>
-                <label className="block text-sm font-medium text-white mb-2">
-                  Email
-                </label>
-                <input type="email" placeholder="Ej: juan.perez@example.com" value={developerData.email} onChange={e => setDeveloperData({
-              ...developerData,
-              email: e.target.value
-            })} className="w-full px-4 py-3 bg-[#0F0F0F] border border-white/10 rounded-lg text-white placeholder-[#8E8E93] focus:border-[#FF3B30] focus:ring-1 focus:ring-[#FF3B30] outline-none transition-all" />
-              </div>
-              
-              <div>
-                <label className="block text-sm font-medium text-white mb-2">
-                  Rol
-                </label>
-                <input type="text" placeholder="Ej: Desarrollador Frontend" value={developerData.role} onChange={e => setDeveloperData({
-              ...developerData,
-              role: e.target.value
-            })} className="w-full px-4 py-3 bg-[#0F0F0F] border border-white/10 rounded-lg text-white placeholder-[#8E8E93] focus:border-[#FF3B30] focus:ring-1 focus:ring-[#FF3B30] outline-none transition-all" />
-              </div>
-            </div>
+{showAddDeveloperModal && (
+  <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm px-4">
+    <div className="bg-[#1C1C1E] border border-white/10 rounded-2xl p-6 w-full max-w-lg">
+      <div className="flex items-center justify-between mb-6">
+        <h3 className="text-xl font-semibold text-white">Agregar Developer</h3>
+        <button
+          onClick={() => {
+            setShowAddDeveloperModal(false);
+            setSelectedDeveloperId("");
+          }}
+          className="text-[#8E8E93] hover:text-white transition-colors"
+        >
+          <X className="w-5 h-5" />
+        </button>
+      </div>
 
-            <div className="flex gap-3 mt-6">
-              <Button variant="outline" onClick={() => setShowAddDeveloperModal(false)} className="flex-1">
-                Cancelar
-              </Button>
-              <Button variant="primary" onClick={handleAddDeveloper} className="flex-1">
-                Agregar Desarrollador
-              </Button>
-            </div>
-          </div>
-        </div>}
+      <div className="space-y-4">
+        <div>
+          <label className="block text-sm font-medium text-white mb-2">
+            Developer
+          </label>
+
+          <select
+            value={selectedDeveloperId}
+            onChange={(e) => setSelectedDeveloperId(e.target.value)}
+            className="w-full px-4 py-3 bg-[#0F0F0F] border border-white/10 rounded-xl text-white focus:border-[#FF3B30] focus:ring-1 focus:ring-[#FF3B30] outline-none transition-all"
+          >
+            <option value="">
+              {loadingDevelopers ? "Cargando developers..." : "Seleccionar developer"}
+            </option>
+
+            {availableDevelopers.map((developer) => (
+              <option key={developer.id} value={developer.id}>
+                {developer.fullName} — {developer.email}
+              </option>
+            ))}
+          </select>
+
+          {!loadingDevelopers && availableDevelopers.length === 0 && (
+            <p className="text-sm text-[#8E8E93] mt-2">
+              No hay developers disponibles para agregar.
+            </p>
+          )}
+        </div>
+      </div>
+
+      <div className="flex gap-3 mt-8">
+        <button
+          onClick={() => {
+            setShowAddDeveloperModal(false);
+            setSelectedDeveloperId("");
+          }}
+          className="flex-1 px-4 py-3 bg-[#0F0F0F] border border-white/10 rounded-xl text-white hover:bg-white/5 transition-all"
+        >
+          Cancelar
+        </button>
+
+        <button
+          onClick={handleAddDeveloper}
+          disabled={!selectedDeveloperId}
+          className="flex-1 px-4 py-3 bg-[#FF3B30] hover:bg-[#FF3B30]/90 disabled:opacity-50 disabled:cursor-not-allowed rounded-xl text-white font-medium transition-all"
+        >
+          Agregar
+        </button>
+      </div>
+    </div>
+  </div>
+)}
 
       {}
       {selectedTicket && <TicketDetailModal ticket={selectedTicket} projectName={project.name} onClose={() => setSelectedTicket(null)} onUpdate={updates => handleTicketUpdate(selectedTicket.id, updates)} canEdit={canEditTickets} userRole={user.role} onDivideTicket={handleDivideTicket} />}
