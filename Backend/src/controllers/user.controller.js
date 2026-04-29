@@ -1,4 +1,5 @@
 const { getActiveUsers } = require("../services/user.service");
+const prisma = require("../config/prisma");
 
 async function getUsersController(req, res) {
   try {
