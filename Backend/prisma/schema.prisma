@@ -19,6 +19,7 @@ model User {
   createdAt          DateTime        @default(now())
   updatedAt          DateTime        @updatedAt
   deletedAt          DateTime?
+
   createdProjects    Project[]       @relation("CreatedProjects")
   managedProjects    Project[]       @relation("ManagedProjects")
   projectMemberships ProjectMember[]
@@ -35,6 +36,7 @@ model UserOtp {
   expiresAt DateTime
   usedAt    DateTime?
   createdAt DateTime  @default(now())
+
   user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId, type])
@@ -57,6 +59,7 @@ model Project {
   createdAt     DateTime        @default(now())
   updatedAt     DateTime        @updatedAt
   archivedAt    DateTime?
+
   createdBy     User            @relation("CreatedProjects", fields: [createdById], references: [id])
   pm            User?           @relation("ManagedProjects", fields: [pmId], references: [id])
   members       ProjectMember[]
@@ -71,9 +74,11 @@ model ProjectMember {
   joinedAt  DateTime  @default(now())
   leftAt    DateTime?
   createdAt DateTime  @default(now())
+
   project   Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
   user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 
+  @@unique([projectId, userId])
   @@index([projectId])
   @@index([userId])
 }
@@ -90,10 +95,13 @@ model Sprint {
   completedAt DateTime?
   createdAt   DateTime     @default(now())
   updatedAt   DateTime     @updatedAt
+
   project     Project      @relation(fields: [projectId], references: [id], onDelete: Cascade)
   tickets     Ticket[]
 
   @@index([projectId])
+  @@index([status])
+  @@index([startDate, endDate])
 }
 
 model Ticket {
@@ -101,26 +109,45 @@ model Ticket {
   projectId      String
   sprintId       String
   parentTicketId String?
+
   title          String
   description    String?
   status         TicketStatus  @default(TODO)
   priority       PriorityLevel @default(MEDIUM)
+
   storyPoints    Int?
+
   assignedToId   String?
   createdById    String
+
+  startDate      DateTime?
+  dueDate        DateTime?
+
   startedAt      DateTime?
   completedAt    DateTime?
+
   estimatedHours Float?
+  actualHours    Float?
+
   createdAt      DateTime      @default(now())
   updatedAt      DateTime      @updatedAt
+
   assignedTo     User?         @relation("AssignedTickets", fields: [assignedToId], references: [id])
   createdBy      User          @relation("CreatedTickets", fields: [createdById], references: [id])
   project        Project       @relation(fields: [projectId], references: [id], onDelete: Cascade)
   sprint         Sprint        @relation(fields: [sprintId], references: [id], onDelete: Cascade)
 
+  parentTicket   Ticket?       @relation("TicketSubtickets", fields: [parentTicketId], references: [id])
+  subtickets     Ticket[]      @relation("TicketSubtickets")
+
   @@index([projectId])
   @@index([sprintId])
   @@index([assignedToId])
+  @@index([status])
+  @@index([priority])
+  @@index([startDate])
+  @@index([dueDate])
+  @@index([completedAt])
 }
 
 enum UserRole {
@@ -176,4 +203,3 @@ enum PriorityLevel {
   HIGH
   CRITICAL
 }
-
