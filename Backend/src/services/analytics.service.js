@@ -91,12 +91,10 @@ async function getProjectDashboard({ projectId }) {
 
   const hoursVariance = actualHours - estimatedHours;
 
-  const efficiency =
-    actualHours > 0
-      ? Number(
-          (estimatedHours / actualHours).toFixed(2)
-        )
-      : 1;
+const efficiency =
+  actualHours > 0
+    ? Number((estimatedHours / actualHours).toFixed(2))
+    : null;
 
   // ===============================
   // Planned Progress by Dates
@@ -123,15 +121,15 @@ async function getProjectDashboard({ projectId }) {
     );
   }
 
-  const scheduleVariance =
-    progress - plannedProgress;
+const scheduleVariance =
+  tickets.length === 0
+    ? 0
+    : progress - plannedProgress;
 
-  const spi =
-    plannedProgress > 0
-      ? Number(
-          (progress / plannedProgress).toFixed(2)
-        )
-      : 1;
+const spi =
+  hasWorkStarted && plannedProgress > 0
+    ? Number((progress / plannedProgress).toFixed(2))
+    : 1;
 
   // ===============================
   // Risk

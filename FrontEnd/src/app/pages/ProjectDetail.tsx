@@ -5,9 +5,7 @@ import { Badge } from '../components/ui/badge';
 import { Button } from '../components/ui/button';
 import { Header } from '../components/Header';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar } from 'recharts';
-import { projects, globalGamification, globalNotifications, type GlobalNotification, developerMetrics } from '../data/mockData';
-import type { Ticket } from '../data/mockData';
-import { useAuth } from '../contexts/AuthContext';
+type Ticket = any;import { useAuth } from '../contexts/AuthContext';
 import { TicketDetailModal } from '../components/TicketDetailModal';
 import { authFetch } from '../../services/api';
 import type { BackendProject } from '../../types/project';
@@ -118,262 +116,86 @@ useEffect(() => {
 
 
 
-const mockProject = projects.find(p => p.id === id) || projects[0];
 const backendProject = backendProjects.find(p => p.id === id) || null;
-
 const project = useMemo(() => {
-  const mapTeamFromMembers = (members?: BackendProject['members']) => {
-    if (dashboard?.teamMetrics?.length) {
-      return dashboard.teamMetrics.map((member: any) => ({
-        id: member.id,
-        name: member.name || 'N/A',
-        role: member.role || 'Developer',
-        email: member.email || 'N/A',
-        avatar:
-          member.name
-            ?.split(' ')
-            .filter(Boolean)
-            .map((part: string) => part[0])
-            .join('')
-            .slice(0, 2)
-            .toUpperCase() || 'NA',
-        tasksAssigned: member.tasksAssigned ?? 0,
-        performance: member.performance ?? 0,
-        status: member.status || 'Active',
-      }));
-    }
+  if (!backendProject) return null;
 
-    if (!members || members.length === 0) return [];
+  const teamMetrics = dashboard?.teamMetrics || [];
 
-    return members.map((m) => ({
-      id: m.id,
-      name: m.fullName || 'N/A',
-      role: m.role || 'N/A',
-      email: m.email || 'N/A',
+  const team = (backendProject.members || []).map((member: any) => {
+    const metric = teamMetrics.find((m: any) => m.id === member.id);
+
+    return {
+      id: member.id,
+      name: member.fullName || 'N/A',
+      role: member.role || 'N/A',
+      email: member.email || 'N/A',
       avatar:
-        m.fullName
+        member.fullName
           ?.split(' ')
           .filter(Boolean)
-          .map((part) => part[0])
+          .map((part: string) => part[0])
           .join('')
           .slice(0, 2)
           .toUpperCase() || 'NA',
-      tasksAssigned: 0,
-      performance: 0,
-      status: 'N/A',
-    }));
-  };
-
-  if (!mockProject && !backendProject) return null;
-
-  if (!mockProject && backendProject) {
-    return {
-      id: backendProject.id,
-      name: safeText(backendProject.name),
-      code: safeText(backendProject.code),
-      description: safeText(backendProject.description),
-
-      status: formatBackendStatus(backendProject.status),
-      risk: dashboard?.kpis?.risk ? mapDashboardRiskToUi(dashboard.kpis.risk) : formatBackendRisk(backendProject.riskLevel),
-
-      startDate: backendProject.startDate ?? null,
-      targetEndDate: backendProject.targetEndDate ?? null,
-      actualEndDate: backendProject.actualEndDate ?? null,
-
-      startDateLabel: formatDateLabel(backendProject.startDate),
-      targetEndDateLabel: formatDateLabel(backendProject.targetEndDate),
-      actualEndDateLabel: formatDateLabel(backendProject.actualEndDate),
-
-      budget: backendProject.budget ?? null,
-      budgetLabel: formatMoneyLabel(backendProject.budget),
-
-      pm: backendProject.pm
-        ? {
-            name: backendProject.pm.fullName,
-            email: backendProject.pm.email,
-            role: backendProject.pm.role,
-          }
-        : {
-            name: 'N/A',
-            email: 'N/A',
-            role: 'N/A',
-          },
-
-      createdBy: backendProject.createdBy
-        ? {
-            name: backendProject.createdBy.fullName,
-            email: backendProject.createdBy.email,
-            role: backendProject.createdBy.role,
-          }
-        : {
-            name: 'N/A',
-            email: 'N/A',
-            role: 'N/A',
-          },
-
-      pmName: backendProject.pm?.fullName || 'N/A',
-      pmEmail: backendProject.pm?.email || 'N/A',
-      createdByName: backendProject.createdBy?.fullName || 'N/A',
-      createdByEmail: backendProject.createdBy?.email || 'N/A',
-
-      members: backendProject.members ?? [],
-      developers: (backendProject.members ?? []).map((m) => ({
-        name: m.fullName,
-        role: m.role,
-        email: m.email,
-        avatar: m.avatarUrl,
-        completedTickets: 'N/A',
-        velocity: 'N/A',
-        workload: 'N/A',
-      })),
-
-      team: mapTeamFromMembers(backendProject.members),
-      teamMembersLabel: backendProject.members.length
-        ? backendProject.members.map((m) => m.fullName).join(', ')
-        : 'N/A',
-      teamSize: backendProject.stats?.membersCount ?? 0,
-
-      stats: backendProject.stats ?? {
-        membersCount: 0,
-        sprintsCount: 0,
-        ticketsCount: 0,
-      },
-
-      sprintsCountLabel: backendProject.stats?.sprintsCount ?? 'N/A',
-      ticketsCountLabel: backendProject.stats?.ticketsCount ?? 'N/A',
-
-      progress: dashboard?.kpis?.progress ?? 0,
-      progressLabel:
-        dashboard?.kpis?.progress !== undefined && dashboard?.kpis?.progress !== null
-          ? `${dashboard.kpis.progress}%`
-          : '0%',
-      scheduleVariance: dashboard?.kpis?.scheduleVariance ?? 0,
-      spi: dashboard?.kpis?.spi ?? 1,
-      delayedMilestones: dashboard?.kpis?.delayedMilestones ?? 0,
-      blockedTickets: dashboard?.kpis?.blockedTickets ?? 0,
-      teamVelocity: 'N/A',
-      openRisks: 'N/A',
-
-sprints: realSprints.map(mapBackendSprintToUi),
-tickets: realTickets.map(mapBackendTicketToUi),
-      notifications: [],
-      progressHistory: dashboard?.progressHistory?.length ? dashboard.progressHistory : [{ date: 'Real', planned: 0, actual: 0 }],
-
-      closedDate: backendProject.actualEndDate
-        ? new Date(backendProject.actualEndDate).toISOString().split('T')[0]
-        : 'N/A',
-      closedBy: 'N/A',
+      tasksAssigned: metric?.tasksAssigned ?? 0,
+      performance: metric?.performance ?? 0,
+      estimatedHours: metric?.estimatedHours ?? null,
+      actualHours: metric?.actualHours ?? null,
+      status: 'Active',
     };
-  }
+  });
 
   return {
-    ...mockProject,
+    id: backendProject.id,
+    name: safeText(backendProject.name),
+    code: safeText(backendProject.code),
+    description: safeText(backendProject.description),
 
-    id: backendProject?.id ?? mockProject.id,
-    name: backendProject?.name ?? mockProject.name,
-    code: safeText(backendProject?.code),
-    description: safeText(backendProject?.description),
+    status: formatBackendStatus(backendProject.status),
+    risk: dashboard?.kpis?.risk
+      ? mapDashboardRiskToUi(dashboard.kpis.risk)
+      : formatBackendRisk(backendProject.riskLevel),
 
-    status: formatBackendStatus(backendProject?.status),
-    risk: dashboard?.kpis?.risk ? mapDashboardRiskToUi(dashboard.kpis.risk) : formatBackendRisk(backendProject?.riskLevel),
+    startDate: backendProject.startDate ?? null,
+    targetEndDate: backendProject.targetEndDate ?? null,
+    actualEndDate: backendProject.actualEndDate ?? null,
 
-    startDate: backendProject?.startDate ?? null,
-    targetEndDate: backendProject?.targetEndDate ?? null,
-    actualEndDate: backendProject?.actualEndDate ?? null,
+    startDateLabel: formatDateLabel(backendProject.startDate),
+    targetEndDateLabel: formatDateLabel(backendProject.targetEndDate),
+    actualEndDateLabel: formatDateLabel(backendProject.actualEndDate),
 
-    startDateLabel: formatDateLabel(backendProject?.startDate),
-    targetEndDateLabel: formatDateLabel(backendProject?.targetEndDate),
-    actualEndDateLabel: formatDateLabel(backendProject?.actualEndDate),
+    budget: backendProject.budget ?? null,
+    budgetLabel: formatMoneyLabel(backendProject.budget),
 
-    budget: backendProject?.budget ?? null,
-    budgetLabel: formatMoneyLabel(backendProject?.budget),
+    pmName: backendProject.pm?.fullName || 'N/A',
+    pmEmail: backendProject.pm?.email || 'N/A',
+    createdByName: backendProject.createdBy?.fullName || 'N/A',
+    createdByEmail: backendProject.createdBy?.email || 'N/A',
 
-    pm: backendProject?.pm
-      ? {
-          name: backendProject.pm.fullName,
-          email: backendProject.pm.email,
-          role: backendProject.pm.role,
-        }
-      : {
-          name: 'N/A',
-          email: 'N/A',
-          role: 'N/A',
-        },
+    members: backendProject.members || [],
+    team,
 
-    createdBy: backendProject?.createdBy
-      ? {
-          name: backendProject.createdBy.fullName,
-          email: backendProject.createdBy.email,
-          role: backendProject.createdBy.role,
-        }
-      : {
-          name: 'N/A',
-          email: 'N/A',
-          role: 'N/A',
-        },
+    teamSize: backendProject.stats?.membersCount ?? team.length,
+    sprintsCountLabel: backendProject.stats?.sprintsCount ?? realSprints.length,
+    ticketsCountLabel: backendProject.stats?.ticketsCount ?? realTickets.length,
 
-    pmName: backendProject?.pm?.fullName || 'N/A',
-    pmEmail: backendProject?.pm?.email || 'N/A',
-    createdByName: backendProject?.createdBy?.fullName || 'N/A',
-    createdByEmail: backendProject?.createdBy?.email || 'N/A',
+    sprints: realSprints.map(mapBackendSprintToUi),
+    tickets: realTickets.map(mapBackendTicketToUi),
 
-    members: backendProject?.members ?? [],
-    developers: backendProject?.members?.length
-      ? backendProject.members.map((m) => ({
-          name: m.fullName,
-          role: m.role,
-          email: m.email,
-          avatar: m.avatarUrl,
-          completedTickets: 'N/A',
-          velocity: 'N/A',
-          workload: 'N/A',
-        }))
+    progressHistory: dashboard?.progressHistory?.length
+      ? dashboard.progressHistory
       : [],
 
-    team: backendProject?.members?.length
-      ? mapTeamFromMembers(backendProject.members)
-      : Array.isArray(mockProject.team)
-      ? mockProject.team
-      : [],
-
-    teamMembersLabel: backendProject?.members?.length
-      ? backendProject.members.map((m) => m.fullName).join(', ')
-      : 'N/A',
-
-    teamSize: backendProject?.stats?.membersCount ?? mockProject.team?.length ?? 0,
-
-    stats: backendProject?.stats ?? {
-      membersCount: mockProject.team?.length ?? 0,
-      sprintsCount: 0,
-      ticketsCount: 0,
-    },
-
-    sprintsCountLabel: backendProject?.stats?.sprintsCount ?? 'N/A',
-    ticketsCountLabel: backendProject?.stats?.ticketsCount ?? 'N/A',
-
-    progress: dashboard?.kpis?.progress ?? 0,
-    progressLabel:
-      dashboard?.kpis?.progress !== undefined && dashboard?.kpis?.progress !== null
-        ? `${dashboard.kpis.progress}%`
-        : '0%',
-    scheduleVariance: dashboard?.kpis?.scheduleVariance ?? 0,
-    spi: dashboard?.kpis?.spi ?? 1,
-    delayedMilestones: dashboard?.kpis?.delayedMilestones ?? 0,
-    blockedTickets: dashboard?.kpis?.blockedTickets ?? 0,
-    teamVelocity: 'N/A',
-    openRisks: 'N/A',
-
-sprints: realSprints.map(mapBackendSprintToUi),
-tickets: realTickets.map(mapBackendTicketToUi),
-    notifications: [],
-    progressHistory: dashboard?.progressHistory?.length ? dashboard.progressHistory : [{ date: 'Real', planned: 0, actual: 0 }],
-
-    closedDate: backendProject?.actualEndDate
+    closedDate: backendProject.actualEndDate
       ? new Date(backendProject.actualEndDate).toISOString().split('T')[0]
       : 'N/A',
-    closedBy: 'N/A',
   };
-}, [mockProject, backendProject, realSprints, realTickets, dashboard]);
+}, [backendProject, realSprints, realTickets, dashboard]);
+const projectSprints = project?.sprints || [];
+const projectTickets = project?.tickets || [];
+const projectTeam = project?.team || [];
+const projectBlockers = (project as any)?.blockers || [];
   const [showProgressModal, setShowProgressModal] = useState(false);
   const [showSprintModal, setShowSprintModal] = useState(false);
   const [showTicketModal, setShowTicketModal] = useState(false);
@@ -466,11 +288,11 @@ const [ticketData, setTicketData] = useState({
     priority: 'Medium',
     description: ''
   }]);
-  const activeSprint = project.sprints.find((s) => s.status === 'Active');
+const activeSprint = projectSprints.find((s) => s.status === 'Active');
   const [sprintFilter, setSprintFilter] = useState<string>(activeSprint?.id || 'active');
 
   const generalSprintFilters = ['active', 'history', 'upcoming', 'all'];
-  const selectedSprintFromFilter = project.sprints.find((s) => s.id === sprintFilter);
+const selectedSprintFromFilter = projectSprints.find((s) => s.id === sprintFilter);
   const canCreateTicketInCurrentFilter = !generalSprintFilters.includes(sprintFilter);
 
   const assignableDevelopers = (backendProject?.members || [])
@@ -853,9 +675,9 @@ const handleCompleteSprint = async () => {
   const getParentTickets = (tickets: Ticket[]) => {
     return tickets.filter(t => !t.parentTicketId);
   };
-  const getSubTickets = (parentTicketId: string) => {
-    return project.tickets.filter(t => t.parentTicketId === parentTicketId);
-  };
+const getSubTickets = (parentTicketId: string) => {
+  return projectTickets.filter(t => t.parentTicketId === parentTicketId);
+};
   const getTicketProgress = (ticket: Ticket): number => {
     if (ticket.subTickets && ticket.subTickets.length > 0) {
       const subTickets = ticket.subTickets.map(id => project.tickets.find(t => t.id === id)).filter(Boolean) as Ticket[];
@@ -865,6 +687,66 @@ const handleCompleteSprint = async () => {
     return ticket.status === 'Done' ? 100 : 0;
   };
   const parentTicketsOnly = getParentTickets(finalFilteredTickets);
+  const metricTickets = finalFilteredTickets || [];
+
+const totalStoryPoints = metricTickets.reduce(
+  (sum, ticket) => sum + (Number(ticket.storyPoints ?? ticket.estimation) || 0),
+  0
+);
+
+const doneStoryPoints = metricTickets
+  .filter((ticket) => ticket.status === 'Done')
+  .reduce(
+    (sum, ticket) => sum + (Number(ticket.storyPoints ?? ticket.estimation) || 0),
+    0
+  );
+
+const progressByFilter = totalStoryPoints
+  ? Math.round((doneStoryPoints / totalStoryPoints) * 100)
+  : 0;
+
+const blockedByFilter = metricTickets.filter(
+  (ticket) => ticket.status === 'Blocked'
+).length;
+
+const delayedByFilter = metricTickets.filter((ticket) => {
+  if (!ticket.dueDate) return false;
+
+  return (
+    new Date(ticket.dueDate) < new Date() &&
+    !['Done', 'Cancelled'].includes(ticket.status)
+  );
+}).length;
+
+const estimatedHoursByFilter = metricTickets.reduce(
+  (sum, ticket) => sum + (Number(ticket.estimatedHours) || 0),
+  0
+);
+
+const actualHoursByFilter = metricTickets
+  .filter((ticket) => ticket.status === 'Done')
+  .reduce((sum, ticket) => sum + (Number(ticket.actualHours) || 0), 0);
+
+const hoursVarianceByFilter = actualHoursByFilter - estimatedHoursByFilter;
+
+const efficiencyByFilter =
+  actualHoursByFilter > 0
+    ? Number((estimatedHoursByFilter / actualHoursByFilter).toFixed(2))
+    : null;
+
+const filteredKpis = {
+  progress: progressByFilter,
+  progressLabel: `${progressByFilter}%`,
+  blockedTickets: blockedByFilter,
+  delayedMilestones: delayedByFilter,
+  estimatedHours: estimatedHoursByFilter,
+  actualHours: actualHoursByFilter,
+  hoursVariance: hoursVarianceByFilter,
+  efficiency: efficiencyByFilter,
+  scheduleVariance: dashboard?.kpis?.scheduleVariance ?? 'N/A',
+  spi: dashboard?.kpis?.spi ?? 'N/A',
+  risk: dashboard?.kpis?.risk ? mapDashboardRiskToUi(dashboard.kpis.risk) : 'N/A',
+};
   const canManageProject = user.role === 'PM' || user.role === 'ADMIN';
   const canEditTickets = true;
 const handleTicketUpdate = async (ticketId: string, updates: any) => {
@@ -1015,8 +897,8 @@ if (projectLoadError && !backendProject) {
                 <option value="history">✅ Historial / Sprints Cerrados</option>
                 <option value="upcoming">📅 Próximos Sprints</option>
                 <option value="all">📊 Todos los Sprints</option>
-                {project.sprints.map(sprint => <option key={sprint.id} value={sprint.id}>
-                    {sprint.status === 'Active' && '🏃 '}
+{projectSprints.map(sprint => <option key={sprint.id} value={sprint.id}>
+                      {sprint.status === 'Active' && '🏃 '}
                     {sprint.status === 'Completed' && '✅ '}
                     {sprint.status === 'Upcoming' && '📅 '}
                     {sprint.name}
@@ -1027,239 +909,249 @@ if (projectLoadError && !backendProject) {
         </div>
 
         {}
-        <section>
-          {role === 'DEVELOPER' ? <>
-              <h2 className="text-xl font-semibold text-white mb-6 flex items-center gap-2">
-                <Trophy className="w-5 h-5 text-[#FF3B30]" />
-                Mis Métricas Personales
-              </h2>
-              {(() => {
-            const devMetrics = developerMetrics[user.name];
-            if (!devMetrics) {
-              return <p className="text-[#8E8E93]">No hay métricas disponibles</p>;
-            }
-            return <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
-                    {}
-                    <div className="bg-[#1C1C1E] border border-white/10 rounded-xl p-5 backdrop-blur-xl hover:border-white/20 transition-all">
-                      <div className="flex items-start justify-between mb-3">
-                        <div className="p-2 bg-green-500/10 rounded-lg">
-                          <CheckCircle2 className="w-5 h-5 text-green-500" />
-                        </div>
-                        <TrendingUp className="w-4 h-4 text-green-500" />
-                      </div>
-                      <p className="text-3xl font-bold text-white mb-1">{devMetrics.completedTickets}</p>
-                      <p className="text-sm text-[#8E8E93]">Tickets Completados</p>
-                    </div>
+<section>
+  {role === 'DEVELOPER' ? (
+    <>
+      <h2 className="text-xl font-semibold text-white mb-6 flex items-center gap-2">
+        <Trophy className="w-5 h-5 text-[#FF3B30]" />
+        Mis Métricas Personales
+      </h2>
 
-                    {}
-                    <div className="bg-[#1C1C1E] border border-white/10 rounded-xl p-5 backdrop-blur-xl hover:border-white/20 transition-all">
-                      <div className="flex items-start justify-between mb-3">
-                        <div className="p-2 bg-blue-500/10 rounded-lg">
-                          <Activity className="w-5 h-5 text-blue-500" />
-                        </div>
-                      </div>
-                      <p className="text-3xl font-bold text-white mb-1">{devMetrics.inProgressTickets}</p>
-                      <p className="text-sm text-[#8E8E93]">En Progreso</p>
-                    </div>
+      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
+        {[
+          {
+            value: metricTickets.filter(
+              (t) => t.assignee === user.name || t.assignee?.includes(user.name)
+            ).length,
+            label: 'Mis Tickets',
+            icon: Trophy,
+            color: 'text-[#FF3B30]',
+            bg: 'bg-[#FF3B30]/10',
+          },
+          {
+            value: metricTickets.filter(
+              (t) =>
+                (t.assignee === user.name || t.assignee?.includes(user.name)) &&
+                t.status === 'Done'
+            ).length,
+            label: 'Completados',
+            icon: CheckCircle2,
+            color: 'text-green-500',
+            bg: 'bg-green-500/10',
+          },
+          {
+            value: metricTickets.filter(
+              (t) =>
+                (t.assignee === user.name || t.assignee?.includes(user.name)) &&
+                t.status === 'In Progress'
+            ).length,
+            label: 'En Progreso',
+            icon: Clock,
+            color: 'text-blue-500',
+            bg: 'bg-blue-500/10',
+          },
+          {
+            value: `${metricTickets
+              .filter((t) => t.assignee === user.name || t.assignee?.includes(user.name))
+              .reduce((sum, t) => sum + (Number(t.estimatedHours) || 0), 0)}h`,
+            label: 'Horas Estimadas',
+            icon: Clock,
+            color: 'text-purple-500',
+            bg: 'bg-purple-500/10',
+          },
+          {
+            value: `${metricTickets
+              .filter(
+                (t) =>
+                  (t.assignee === user.name || t.assignee?.includes(user.name)) &&
+                  t.status === 'Done'
+              )
+              .reduce((sum, t) => sum + (Number(t.actualHours) || 0), 0)}h`,
+            label: 'Horas Usadas',
+            icon: Activity,
+            color: 'text-cyan-500',
+            bg: 'bg-cyan-500/10',
+          },
+          {
+            value: 'N/A',
+            label: 'Ranking',
+            icon: Award,
+            color: 'text-yellow-500',
+            bg: 'bg-yellow-500/10',
+          },
+        ].map((item) => {
+          const Icon = item.icon;
 
-                    {}
-                    <div className="bg-[#1C1C1E] border border-white/10 rounded-xl p-5 backdrop-blur-xl hover:border-white/20 transition-all">
-                      <div className="flex items-start justify-between mb-3">
-                        <div className="p-2 bg-purple-500/10 rounded-lg">
-                          <Zap className="w-5 h-5 text-purple-500" />
-                        </div>
-                        <TrendingUp className="w-4 h-4 text-green-500" />
-                      </div>
-                      <p className="text-3xl font-bold text-white mb-1">{devMetrics.personalVelocity}</p>
-                      <p className="text-sm text-[#8E8E93]">Velocity (pts/sprint)</p>
-                    </div>
-
-                    {}
-                    <div className="bg-[#1C1C1E] border border-white/10 rounded-xl p-5 backdrop-blur-xl hover:border-white/20 transition-all">
-                      <div className="flex items-start justify-between mb-3">
-                        <div className="p-2 bg-cyan-500/10 rounded-lg">
-                          <Percent className="w-5 h-5 text-cyan-500" />
-                        </div>
-                        {devMetrics.completionRate >= 85 ? <TrendingUp className="w-4 h-4 text-green-500" /> : <TrendingDown className="w-4 h-4 text-[#FF3B30]" />}
-                      </div>
-                      <p className="text-3xl font-bold text-white mb-1">{devMetrics.completionRate.toFixed(1)}%</p>
-                      <p className="text-sm text-[#8E8E93]">Tasa Completado</p>
-                    </div>
-
-                    {}
-                    <div className="bg-[#1C1C1E] border border-white/10 rounded-xl p-5 backdrop-blur-xl hover:border-white/20 transition-all">
-                      <div className="flex items-start justify-between mb-3">
-                        <div className="p-2 bg-orange-500/10 rounded-lg">
-                          <Flame className="w-5 h-5 text-orange-500" />
-                        </div>
-                        <Trophy className="w-4 h-4 text-yellow-500" />
-                      </div>
-                      <p className="text-3xl font-bold text-white mb-1">{devMetrics.currentStreak}</p>
-                      <p className="text-sm text-[#8E8E93]">Días Consecutivos 🔥</p>
-                    </div>
-
-                    {}
-                    <div className="bg-[#1C1C1E] border border-white/10 rounded-xl p-5 backdrop-blur-xl hover:border-white/20 transition-all">
-                      <div className="flex items-start justify-between mb-3">
-                        <div className="p-2 bg-yellow-500/10 rounded-lg">
-                          <Award className="w-5 h-5 text-yellow-500" />
-                        </div>
-                        {devMetrics.rankInTeam === 1 && <Star className="w-4 h-4 text-yellow-500 fill-yellow-500" />}
-                      </div>
-                      <p className="text-3xl font-bold text-white mb-1">#{devMetrics.rankInTeam}</p>
-                      <p className="text-sm text-[#8E8E93]">Top {devMetrics.percentile}% del equipo</p>
-                    </div>
-                  </div>;
-          })()}
-
-              {}
-              {(() => {
-            const devMetrics = developerMetrics[user.name];
-            if (!devMetrics) return null;
-            return <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mt-4">
-                    {}
-                    <div className="bg-[#1C1C1E] border border-white/10 rounded-xl p-4 backdrop-blur-xl">
-                      <div className="flex items-center gap-3">
-                        <div className="p-2 bg-indigo-500/10 rounded-lg">
-                          <Clock className="w-4 h-4 text-indigo-500" />
-                        </div>
-                        <div>
-                          <p className="text-2xl font-bold text-white">{devMetrics.avgResolutionTime}</p>
-                          <p className="text-xs text-[#8E8E93]">Días promedio/ticket</p>
-                        </div>
-                      </div>
-                    </div>
-
-                    {}
-                    <div className="bg-[#1C1C1E] border border-white/10 rounded-xl p-4 backdrop-blur-xl">
-                      <div className="flex items-center gap-3">
-                        <div className="p-2 bg-red-500/10 rounded-lg">
-                          <AlertTriangle className="w-4 h-4 text-red-500" />
-                        </div>
-                        <div>
-                          <p className="text-2xl font-bold text-white">{devMetrics.bugRate}%</p>
-                          <p className="text-xs text-[#8E8E93]">Tasa de bugs</p>
-                        </div>
-                      </div>
-                    </div>
-
-                    {}
-                    <div className="bg-[#1C1C1E] border border-white/10 rounded-xl p-4 backdrop-blur-xl">
-                      <div className="flex items-center gap-3">
-                        <div className="p-2 bg-pink-500/10 rounded-lg">
-                          <Code className="w-4 h-4 text-pink-500" />
-                        </div>
-                        <div>
-                          <p className="text-2xl font-bold text-white">{devMetrics.codeReviews}</p>
-                          <p className="text-xs text-[#8E8E93]">Code Reviews</p>
-                        </div>
-                      </div>
-                    </div>
-
-                    {}
-                    <div className="bg-[#1C1C1E] border border-white/10 rounded-xl p-4 backdrop-blur-xl">
-                      <div className="flex items-center gap-3">
-                        <div className="p-2 bg-amber-500/10 rounded-lg">
-                          <Trophy className="w-4 h-4 text-amber-500" />
-                        </div>
-                        <div>
-                          <p className="text-2xl font-bold text-white">{devMetrics.bestStreak}</p>
-                          <p className="text-xs text-[#8E8E93]">Mejor streak récord</p>
-                        </div>
-                      </div>
-                    </div>
-                  </div>;
-          })()}
-            </> : <>
-              <h2 className="text-xl font-semibold text-white mb-6 flex items-center gap-2">
-                <Target className="w-5 h-5 text-[#FF3B30]" />
-                KPIs Estratégicos
-              </h2>
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
-                {}
-                <div className="bg-[#1C1C1E] border border-white/10 rounded-xl p-5 backdrop-blur-xl hover:border-white/20 transition-all">
-                  <div className="flex items-start justify-between mb-3">
-                    <div className="p-2 bg-blue-500/10 rounded-lg">
-                      <TrendingUp className="w-5 h-5 text-blue-500" />
-                    </div>
-                    {project.progress > 60 ? <TrendingUp className="w-4 h-4 text-green-500" /> : <TrendingDown className="w-4 h-4 text-[#FF3B30]" />}
-                  </div>
-<p className="text-3xl font-bold text-white mb-1">{project.progressLabel}</p>
-<p className="text-sm text-[#8E8E93] flex items-center gap-1">
-  % Avance
-  <KpiTooltip text="% Avance = story points completados / story points totales * 100. Solo cuentan tickets con status DONE." />
-</p>                </div>
-
-                {}
-                <div className="bg-[#1C1C1E] border border-white/10 rounded-xl p-5 backdrop-blur-xl hover:border-white/20 transition-all">
-                  <div className="flex items-start justify-between mb-3">
-                    <div className="p-2 bg-purple-500/10 rounded-lg">
-                      <Clock className="w-5 h-5 text-purple-500" />
-                    </div>
-                    {project.scheduleVariance >= 0 ? <TrendingUp className="w-4 h-4 text-green-500" /> : <TrendingDown className="w-4 h-4 text-[#FF3B30]" />}
-                  </div>
-                  <p className="text-3xl font-bold text-white mb-1">{project.scheduleVariance}</p>
-                  <p className="text-sm text-[#8E8E93]">Schedule Variance<KpiTooltip text="Schedule Variance = avance real - avance planeado según fechas del proyecto." /></p>
-                </div>
-
-                {}
-                <div className="bg-[#1C1C1E] border border-white/10 rounded-xl p-5 backdrop-blur-xl hover:border-white/20 transition-all">
-                  <div className="flex items-start justify-between mb-3">
-                    <div className="p-2 bg-cyan-500/10 rounded-lg">
-                      <Activity className="w-5 h-5 text-cyan-500" />
-                    </div>
-                    {project.spi >= 1 ? <TrendingUp className="w-4 h-4 text-green-500" /> : <TrendingDown className="w-4 h-4 text-[#FF3B30]" />}
-                  </div>
-                <p className="text-3xl font-bold text-white mb-1">{project.spi}</p>
-                  <p className="text-sm text-[#8E8E93]">SPI 
-                    <KpiTooltip text="SPI = avance real / avance planeado. Si es menor a 1, el proyecto va atrasado." />
-                  </p>
-                </div>
-
-                {}
-                <div className="bg-[#1C1C1E] border border-white/10 rounded-xl p-5 backdrop-blur-xl hover:border-white/20 transition-all">
-                  <div className="flex items-start justify-between mb-3">
-                    <div className="p-2 bg-[#FF3B30]/10 rounded-lg">
-                      <AlertTriangle className="w-5 h-5 text-[#FF3B30]" />
-                    </div>
-                    <AlertCircle className="w-4 h-4 text-[#FF3B30]" />
-                  </div>
-                  <p className="text-3xl font-bold text-white mb-1">{project.delayedMilestones}</p>
-                  <p className="text-sm text-[#8E8E93]">Hitos Retrasados
-                    <KpiTooltip text="Tickets retrasados = tickets cuya dueDate ya pasó y no están en DONE ni CANCELLED." />
-                  </p>
-                </div>
-
-                {}
-                <div className="bg-[#1C1C1E] border border-white/10 rounded-xl p-5 backdrop-blur-xl hover:border-white/20 transition-all">
-                  <div className="flex items-start justify-between mb-3">
-                    <div className="p-2 bg-orange-500/10 rounded-lg">
-                      <XCircle className="w-5 h-5 text-orange-500" />
-                    </div>
-                    <AlertCircle className="w-4 h-4 text-orange-500" />
-                  </div>
-                  <p className="text-3xl font-bold text-white mb-1">{project.blockedTickets}</p>
-                  <p className="text-sm text-[#8E8E93]">Tickets Bloqueados
-                    <KpiTooltip text="Tickets bloqueados = tickets con status BLOCKED." />
-                  </p>
-                </div>
-
-                {}
-                <div className="bg-[#1C1C1E] border border-white/10 rounded-xl p-5 backdrop-blur-xl hover:border-white/20 transition-all">
-                  <div className="flex items-start justify-between mb-3">
-                    <div className={`p-2 rounded-lg ${project.risk === 'High' ? 'bg-[#FF3B30]/10' : project.risk === 'Medium' ? 'bg-yellow-500/10' : 'bg-green-500/10'}`}>
-                      <Shield className={`w-5 h-5 ${project.risk === 'High' ? 'text-[#FF3B30]' : project.risk === 'Medium' ? 'text-yellow-500' : 'text-green-500'}`} />
-                    </div>
-                  </div>
-                  <p className="text-3xl font-bold text-white mb-1">{project.risk}</p>
-                  <p className="text-sm text-[#8E8E93]">Nivel de Riesgo
-                    <KpiTooltip text="Nivel de riesgo calculado con SPI, tickets bloqueados y tickets retrasados." />
-                  </p>
-                </div>
+          return (
+            <div
+              key={item.label}
+              className="bg-[#1C1C1E] border border-white/10 rounded-2xl p-4 sm:p-5 min-h-[130px] flex items-center gap-4 hover:border-white/20 transition-all min-w-0"
+            >
+              <div className={`w-12 h-12 sm:w-14 sm:h-14 rounded-2xl ${item.bg} flex items-center justify-center shrink-0`}>
+                <Icon className={`w-6 h-6 ${item.color}`} />
               </div>
-            </>}
-        </section>
 
+              <div className="min-w-0 flex-1">
+                <p className="text-3xl sm:text-4xl font-bold text-white leading-none truncate">
+                  {item.value}
+                </p>
+                <p className="text-sm text-[#8E8E93] mt-3 truncate">
+                  {item.label}
+                </p>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </>
+  ) : (
+    <>
+      <h2 className="text-xl font-semibold text-white mb-6 flex items-center gap-2">
+        <Target className="w-5 h-5 text-[#FF3B30]" />
+        KPIs Estratégicos
+      </h2>
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
+        {[
+          {
+            value: filteredKpis.progressLabel,
+            label: '% Avance',
+            tooltip: '% Avance = story points completados / story points totales * 100. Solo cuentan tickets con status DONE.',
+            icon: TrendingUp,
+            color: 'text-blue-500',
+            bg: 'bg-blue-500/10',
+            trend:
+              filteredKpis.progress > 60 ? (
+                <TrendingUp className="w-4 h-4 text-green-500 shrink-0" />
+              ) : (
+                <TrendingDown className="w-4 h-4 text-[#FF3B30] shrink-0" />
+              ),
+          },
+          {
+            value: filteredKpis.scheduleVariance,
+            label: 'Schedule Variance',
+            tooltip: 'Schedule Variance = avance real - avance planeado según fechas del proyecto.',
+            icon: Clock,
+            color: 'text-purple-500',
+            bg: 'bg-purple-500/10',
+            trend:
+              Number(filteredKpis.scheduleVariance) >= 0 ? (
+                <TrendingUp className="w-4 h-4 text-green-500 shrink-0" />
+              ) : (
+                <TrendingDown className="w-4 h-4 text-[#FF3B30] shrink-0" />
+              ),
+          },
+          {
+            value: filteredKpis.spi,
+            label: 'SPI',
+            tooltip: 'SPI = avance real / avance planeado. Si es menor a 1, el proyecto va atrasado.',
+            icon: Activity,
+            color: 'text-cyan-500',
+            bg: 'bg-cyan-500/10',
+            trend:
+              Number(filteredKpis.spi) >= 1 ? (
+                <TrendingUp className="w-4 h-4 text-green-500 shrink-0" />
+              ) : (
+                <TrendingDown className="w-4 h-4 text-[#FF3B30] shrink-0" />
+              ),
+          },
+          {
+            value: filteredKpis.delayedMilestones,
+            label: 'Hitos Retrasados',
+            tooltip: 'Tickets retrasados = tickets cuya dueDate ya pasó y no están en DONE ni CANCELLED.',
+            icon: AlertTriangle,
+            color: 'text-[#FF3B30]',
+            bg: 'bg-[#FF3B30]/10',
+            trend: <AlertCircle className="w-4 h-4 text-[#FF3B30] shrink-0" />,
+          },
+          {
+            value: filteredKpis.blockedTickets,
+            label: 'Tickets Bloqueados',
+            tooltip: 'Tickets bloqueados = tickets con status BLOCKED.',
+            icon: XCircle,
+            color: 'text-orange-500',
+            bg: 'bg-orange-500/10',
+            trend: <AlertCircle className="w-4 h-4 text-orange-500 shrink-0" />,
+          },
+          {
+            value: filteredKpis.risk,
+            label: 'Nivel de Riesgo',
+            tooltip: 'Nivel de riesgo calculado con SPI, tickets bloqueados y tickets retrasados.',
+            icon: Shield,
+            color:
+              filteredKpis.risk === 'High'
+                ? 'text-[#FF3B30]'
+                : filteredKpis.risk === 'Medium'
+                ? 'text-yellow-500'
+                : 'text-green-500',
+            bg:
+              filteredKpis.risk === 'High'
+                ? 'bg-[#FF3B30]/10'
+                : filteredKpis.risk === 'Medium'
+                ? 'bg-yellow-500/10'
+                : 'bg-green-500/10',
+            trend: null,
+          },
+          {
+            value: `${filteredKpis.estimatedHours}h`,
+            label: 'Horas Estimadas',
+            tooltip: 'Horas estimadas = suma de estimatedHours de los tickets visibles según el filtro actual.',
+            icon: Clock,
+            color: 'text-blue-500',
+            bg: 'bg-blue-500/10',
+            trend: null,
+          },
+          {
+            value: `${filteredKpis.actualHours}h`,
+            label: 'Horas Usadas',
+            tooltip: 'Horas usadas = suma de actualHours solo en tickets DONE visibles según el filtro actual.',
+            icon: Clock,
+            color: 'text-green-500',
+            bg: 'bg-green-500/10',
+            trend: null,
+          },
+          {
+            value: filteredKpis.efficiency ?? 'N/A',
+            label: 'Eficiencia',
+            tooltip: 'Eficiencia = horas estimadas / horas usadas. Solo aparece si hay actualHours registrados.',
+            icon: Activity,
+            color: 'text-purple-500',
+            bg: 'bg-purple-500/10',
+            trend: null,
+          },
+        ].map((item) => {
+          const Icon = item.icon;
+
+          return (
+            <div
+              key={item.label}
+              className="bg-[#1C1C1E] border border-white/10 rounded-2xl p-4 sm:p-5 min-h-[130px] flex items-center gap-4 hover:border-white/20 transition-all min-w-0"
+            >
+              <div className={`w-12 h-12 sm:w-14 sm:h-14 rounded-2xl ${item.bg} flex items-center justify-center shrink-0`}>
+                <Icon className={`w-6 h-6 ${item.color}`} />
+              </div>
+
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center justify-between gap-2 mb-3 min-w-0">
+                  <p className="text-sm text-[#8E8E93] flex items-center gap-1 min-w-0 truncate">
+                    <span className="truncate">{item.label}</span>
+                    <KpiTooltip text={item.tooltip} />
+                  </p>
+
+                  {item.trend}
+                </div>
+
+                <p className="text-3xl sm:text-4xl font-bold text-white leading-none truncate">
+                  {item.value}
+                </p>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </>
+  )}
+</section>
         {}
         {role !== 'DEVELOPER' && <section>
             <div className="flex items-center justify-between mb-6">
@@ -1275,7 +1167,7 @@ if (projectLoadError && !backendProject) {
             width: 'max-content'
           }}>
                 {}
-                {canManageProject && project.team.length < 10 && <button onClick={() => setShowAddDeveloperModal(true)} className="bg-[#1C1C1E] border border-dashed border-white/20 rounded-xl p-5 backdrop-blur-xl hover:border-[#FF3B30] hover:bg-[#FF3B30]/5 transition-all group flex flex-col items-center justify-center w-[220px] h-[280px] flex-shrink-0">
+                {canManageProject && projectTeam.length < 10 && <button onClick={() => setShowAddDeveloperModal(true)} className="bg-[#1C1C1E] border border-dashed border-white/20 rounded-xl p-5 backdrop-blur-xl hover:border-[#FF3B30] hover:bg-[#FF3B30]/5 transition-all group flex flex-col items-center justify-center w-[220px] h-[280px] flex-shrink-0">
                     <div className="w-16 h-16 rounded-full bg-[#FF3B30]/10 flex items-center justify-center mb-3 group-hover:bg-[#FF3B30]/20 transition-all">
                       <Plus className="w-8 h-8 text-[#FF3B30]" />
                     </div>
@@ -1283,7 +1175,7 @@ if (projectLoadError && !backendProject) {
                     <p className="text-xs text-[#8E8E93] text-center">Expandir el equipo</p>
                   </button>}
 
-                {project.team.map(member => <div key={member.id} className="bg-[#1C1C1E] border border-white/10 rounded-xl p-5 backdrop-blur-xl hover:border-white/20 transition-all group w-[220px] flex-shrink-0">
+                {projectTeam.map(member => <div key={member.id} className="bg-[#1C1C1E] border border-white/10 rounded-xl p-5 backdrop-blur-xl hover:border-white/20 transition-all group w-[220px] flex-shrink-0">
                     {}
                     <div className="flex flex-col items-center mb-4">
                       <div className="w-16 h-16 rounded-full bg-gradient-to-br from-[#FF3B30] to-[#FF6B30] flex items-center justify-center mb-3 group-hover:scale-110 transition-transform">
@@ -1339,7 +1231,7 @@ if (projectLoadError && !backendProject) {
                   <Users className="w-5 h-5 text-blue-500" />
                 </div>
                 <div>
-                  <p className="text-2xl font-bold text-white">{project.team.length}</p>
+                  <p className="text-2xl font-bold text-white">{projectTeam.length}</p>
                   <p className="text-xs text-[#8E8E93]">Miembros Totales</p>
                 </div>
               </div>
@@ -1352,7 +1244,7 @@ if (projectLoadError && !backendProject) {
                 </div>
                 <div>
                   <p className="text-2xl font-bold text-white">
-                    {project.team.filter(m => m.status === 'Active').length}
+                    {projectTeam.filter(m => m.status === 'Active').length}
                   </p>
                   <p className="text-xs text-[#8E8E93]">Activos</p>
                 </div>
@@ -1366,7 +1258,7 @@ if (projectLoadError && !backendProject) {
                 </div>
                 <div>
                   <p className="text-2xl font-bold text-white">
-                    {project.team.reduce((sum, m) => sum + m.tasksAssigned, 0)}
+                    {projectTeam.reduce((sum, m) => sum + m.tasksAssigned, 0)}
                   </p>
                   <p className="text-xs text-[#8E8E93]">Tareas Asignadas</p>
                 </div>
@@ -1380,8 +1272,8 @@ if (projectLoadError && !backendProject) {
                 </div>
                 <div>
                   <p className="text-2xl font-bold text-white">
-{project.team.length > 0
-  ? `${Math.round(project.team.reduce((sum, m) => sum + m.performance, 0) / project.team.length)}%`
+{projectTeam.length > 0
+  ? `${Math.round(projectTeam.reduce((sum, m) => sum + m.performance, 0) / projectTeam.length)}%`
   : 'N/A'}                  </p>
                   <p className="text-xs text-[#8E8E93]">Performance Prom.</p>
                 </div>
@@ -1394,35 +1286,11 @@ if (projectLoadError && !backendProject) {
         <section>
           <h2 className="text-xl font-semibold text-white mb-6 flex items-center gap-2">
             <BarChart3 className="w-5 h-5 text-[#FF3B30]" />
-            {role === 'DEVELOPER' ? 'Mi Progreso vs Plan Personal' : 'Planned vs Actual'}
+            {'Planned vs Actual'}
           </h2>
           <div className="bg-[#1C1C1E] border border-white/10 rounded-xl p-6 backdrop-blur-xl">
             <ResponsiveContainer width="100%" height={350}>
-              <LineChart data={role === 'DEVELOPER' ? [{
-              date: 'Sem 1',
-              planned: 8,
-              actual: 8
-            }, {
-              date: 'Sem 2',
-              planned: 16,
-              actual: 15
-            }, {
-              date: 'Sem 3',
-              planned: 24,
-              actual: 22
-            }, {
-              date: 'Sem 4',
-              planned: 32,
-              actual: 28
-            }, {
-              date: 'Sem 5',
-              planned: 40,
-              actual: 32
-            }, {
-              date: 'Sem 6',
-              planned: 48,
-              actual: 40
-            }] : project.progressHistory}>
+<LineChart data={project.progressHistory?.length ? project.progressHistory : []}>
                 <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
                 <XAxis dataKey="date" stroke="#8E8E93" tick={{
                 fill: '#8E8E93',
@@ -1432,7 +1300,7 @@ if (projectLoadError && !backendProject) {
                 fill: '#8E8E93',
                 fontSize: 12
               }} label={{
-                value: role === 'DEVELOPER' ? 'Horas' : 'Progreso (%)',
+                value:  'Progreso (%)',
                 angle: -90,
                 position: 'insideLeft',
                 fill: '#8E8E93',
@@ -1448,13 +1316,13 @@ if (projectLoadError && !backendProject) {
                 color: '#8E8E93',
                 marginBottom: '8px'
               }} />
-                <Line type="monotone" dataKey="planned" stroke="#8E8E93" strokeWidth={3} name={role === 'DEVELOPER' ? 'Horas Planificadas' : 'Planificado'} dot={{
+                <Line type="monotone" dataKey="planned" stroke="#8E8E93" strokeWidth={3}name="Planificado"dot={{
                 fill: '#8E8E93',
                 r: 5
               }} activeDot={{
                 r: 7
               }} />
-                <Line type="monotone" dataKey="actual" stroke="#007AFF" strokeWidth={3} name={role === 'DEVELOPER' ? 'Mis Horas Reales' : 'Real'} dot={{
+                <Line type="monotone" dataKey="actual" stroke="#007AFF" strokeWidth={3} name='Real' dot={{
                 fill: '#007AFF',
                 r: 5
               }} activeDot={{
@@ -1480,6 +1348,309 @@ if (projectLoadError && !backendProject) {
             </div>
           </div>
         </section>
+        <section className="lg:col-span-2">
+  <div className="flex items-center justify-between mb-6">
+    <h2 className="text-xl font-semibold text-white flex items-center gap-2">
+      <ListTodo className="w-5 h-5 text-[#FF3B30]" />
+      Gestión Ágil
+    </h2>
+
+    {canManageProject && (
+      <button
+        onClick={() => setShowSprintModal(true)}
+        className="px-4 py-2 bg-[#FF3B30] hover:bg-[#FF3B30]/90 rounded-lg text-white text-sm font-medium transition-all flex items-center gap-2"
+      >
+        <Plus className="w-4 h-4" />
+        Crear Sprint
+      </button>
+    )}
+  </div>
+
+  <div className="mb-6 bg-[#007AFF]/10 border border-[#007AFF]/20 rounded-xl p-4">
+    <div className="flex items-start gap-3">
+      <Info className="w-5 h-5 text-[#007AFF] flex-shrink-0 mt-0.5" />
+
+      <div className="flex-1">
+        <p className="text-sm text-white font-medium mb-1">
+          {sprintFilter === 'active'
+            ? `🏃 Sprints activos: ${backlogTickets.length} tickets visibles`
+            : sprintFilter === 'history'
+            ? `✅ Historial: ${backlogTickets.length} tickets de sprints cerrados`
+            : sprintFilter === 'upcoming'
+            ? `📅 Próximos sprints: ${backlogTickets.length} tickets planeados`
+            : sprintFilter === 'all'
+            ? `📊 Todos los sprints: ${backlogTickets.length} tickets en total`
+            : `${selectedSprintFromFilter?.status === 'Completed' ? '✅' : selectedSprintFromFilter?.status === 'Upcoming' ? '📅' : '🏃'} ${selectedSprintFromFilter?.name || 'Sprint'}: ${backlogTickets.length} tickets`}
+        </p>
+
+        <p className="text-xs text-[#8E8E93]">
+          {sprintFilter === 'active'
+            ? 'Mostrando tickets de sprints activos.'
+            : sprintFilter === 'history'
+            ? 'Mostrando tickets históricos de sprints cerrados.'
+            : sprintFilter === 'upcoming'
+            ? 'Mostrando tickets de sprints planeados.'
+            : sprintFilter === 'all'
+            ? 'Mostrando todos los tickets.'
+            : `Tickets del sprint: ${selectedSprintFromFilter?.duration || 'Sin rango de fechas'}`}
+        </p>
+      </div>
+
+      {canManageProject &&
+        !generalSprintFilters.includes(sprintFilter) &&
+        selectedSprintFromFilter?.status === 'Upcoming' && (
+          <button
+            onClick={() => handleStartSprint(sprintFilter)}
+            className="px-4 py-2 bg-blue-500 hover:bg-blue-600 rounded-lg text-white text-sm font-medium transition-all flex items-center gap-2 flex-shrink-0"
+          >
+            <PlayCircle className="w-4 h-4" />
+            Iniciar Sprint
+          </button>
+        )}
+
+      {canManageProject &&
+        !generalSprintFilters.includes(sprintFilter) &&
+        selectedSprintFromFilter?.status === 'Active' && (
+          <button
+            onClick={() => setShowCompleteSprintModal(true)}
+            className="px-4 py-2 bg-green-500 hover:bg-green-600 rounded-lg text-white text-sm font-medium transition-all flex items-center gap-2 flex-shrink-0"
+          >
+            <CheckCircle2 className="w-4 h-4" />
+            Concluir Sprint
+          </button>
+        )}
+    </div>
+  </div>
+
+  <div className="bg-[#1C1C1E] border border-white/10 rounded-xl overflow-hidden backdrop-blur-xl">
+    <div className="flex items-center justify-between p-6 border-b border-white/10">
+      <div className="flex items-center gap-2">
+        <h3 className="font-semibold text-white">
+          {sprintFilter === 'active'
+            ? 'Tickets - Sprints Activos'
+            : sprintFilter === 'history'
+            ? 'Tickets - Historial'
+            : sprintFilter === 'upcoming'
+            ? 'Tickets - Próximos Sprints'
+            : sprintFilter === 'all'
+            ? 'Todos los Tickets'
+            : `Tickets - ${selectedSprintFromFilter?.name || 'Sprint'}`}
+        </h3>
+
+        <Badge>{parentTicketsOnly.length} tickets</Badge>
+      </div>
+
+      <div className="flex items-center gap-3">
+        <div className="flex items-center gap-1 bg-[#0F0F0F] border border-white/10 rounded-lg p-1">
+          <button
+            onClick={() => setTicketsView('table')}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-medium transition-all ${
+              ticketsView === 'table'
+                ? 'bg-[#FF3B30] text-white'
+                : 'text-[#8E8E93] hover:text-white'
+            }`}
+          >
+            <Table className="w-3.5 h-3.5" />
+            Tabla
+          </button>
+
+          <button
+            onClick={() => setTicketsView('kanban')}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-medium transition-all ${
+              ticketsView === 'kanban'
+                ? 'bg-[#FF3B30] text-white'
+                : 'text-[#8E8E93] hover:text-white'
+            }`}
+          >
+            <LayoutGrid className="w-3.5 h-3.5" />
+            Kanban
+          </button>
+        </div>
+
+        {role === 'DEVELOPER' && (
+          <button
+            onClick={() => setShowMyTicketsOnly(!showMyTicketsOnly)}
+            className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium transition-all border ${
+              showMyTicketsOnly
+                ? 'bg-[#FF3B30] text-white border-[#FF3B30]'
+                : 'bg-[#0F0F0F] text-[#8E8E93] border-white/10 hover:text-white'
+            }`}
+          >
+            <Users className="w-3.5 h-3.5" />
+            Solo mis tickets
+          </button>
+        )}
+
+        {canManageProject && (
+          <Button
+            variant="outline"
+            icon={Plus}
+            onClick={() => {
+              const sprintIdForNewTicket = canCreateTicketInCurrentFilter
+                ? sprintFilter
+                : activeSprint?.id || '';
+
+              if (!sprintIdForNewTicket) {
+                alert('Primero inicia o selecciona un sprint específico para crear tickets.');
+                return;
+              }
+
+              setTicketData({
+                ...ticketData,
+                sprintId: sprintIdForNewTicket,
+              });
+
+              setShowTicketModal(true);
+            }}
+            className="text-xs py-1 px-3"
+          >
+            Crear Ticket
+          </Button>
+        )}
+      </div>
+    </div>
+
+    {ticketsView === 'table' && (
+      <div className="overflow-y-auto max-h-[600px]">
+        <table className="w-full">
+          <thead className="sticky top-0 z-10">
+            <tr className="border-b border-white/10 bg-[#0F0F0F]/50">
+              <th className="text-left px-4 py-3 text-xs font-medium text-[#8E8E93] uppercase">Key</th>
+              <th className="text-left px-4 py-3 text-xs font-medium text-[#8E8E93] uppercase">Summary</th>
+              <th className="text-left px-4 py-3 text-xs font-medium text-[#8E8E93] uppercase">Assignee</th>
+              <th className="text-left px-4 py-3 text-xs font-medium text-[#8E8E93] uppercase">Priority</th>
+              <th className="text-left px-4 py-3 text-xs font-medium text-[#8E8E93] uppercase">Status</th>
+              <th className="text-left px-4 py-3 text-xs font-medium text-[#8E8E93] uppercase">Horas Est.</th>
+            </tr>
+          </thead>
+
+          <tbody className="divide-y divide-white/10">
+            {parentTicketsOnly.length > 0 ? (
+              parentTicketsOnly.map((ticket) => (
+<tr
+  key={ticket.id}
+  onClick={() => setSelectedTicket(ticket)}
+  className={`cursor-pointer transition-all ${
+    ticket.status === 'Done'
+      ? 'bg-green-500/5 opacity-75 hover:bg-green-500/10'
+      : 'hover:bg-white/5'
+  }`}
+>
+                  <td className="px-4 py-4 text-sm text-[#8E8E93]">{ticket.id?.slice(0, 8)}</td>
+                  <td className="px-4 py-4">
+<p
+  className={`text-sm font-medium ${
+    ticket.status === 'Done'
+      ? 'text-green-400 line-through decoration-green-400/70'
+      : 'text-white'
+  }`}
+>
+  {ticket.title}
+</p>                    <p className="text-xs text-[#8E8E93]">{ticket.description || 'Sin descripción'}</p>
+                  </td>
+                  <td className="px-4 py-4 text-sm text-white">{ticket.assignee || 'Sin asignar'}</td>
+                  <td className="px-4 py-4">
+                    <Badge className={priorityColors[ticket.priority] || priorityColors.Medium}>
+                      {ticket.priority || 'Medium'}
+                    </Badge>
+                  </td>
+                  <td className="px-4 py-4">
+                    <Badge>{ticket.status}</Badge>
+                  </td>
+                  <td className="px-4 py-4 text-sm text-white">
+                    {ticket.estimatedHours ?? 'N/A'}h
+                  </td>
+                </tr>
+              ))
+            ) : (
+              <tr>
+                <td colSpan={6} className="px-4 py-10 text-center text-[#8E8E93]">
+                  No hay tickets para este filtro.
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+    )}
+
+{ticketsView === 'kanban' && (
+  <div className="grid grid-cols-1 md:grid-cols-5 gap-4 p-6">
+    {['Backlog', 'In Progress', 'Review', 'Blocked', 'Done'].map((status) => {
+      const statusTickets = parentTicketsOnly.filter(
+        (ticket) => ticket.status === status
+      );
+
+      return (
+        <div
+          key={status}
+          className="bg-[#0F0F0F] border border-white/10 rounded-xl p-4"
+        >
+          <div className="flex items-center justify-between mb-4">
+            <h4 className="text-sm font-semibold text-white">{status}</h4>
+            <Badge>{statusTickets.length}</Badge>
+          </div>
+
+          <div className="space-y-3">
+            {statusTickets.length > 0 ? (
+              statusTickets.map((ticket) => {
+                const isMyTicket =
+                  ticket.assignee === user.name ||
+                  ticket.assignee?.includes(user.name);
+
+                return (
+                  <div
+                    key={ticket.id}
+                    onClick={() => setSelectedTicket(ticket)}
+                    className={`border rounded-lg p-3 cursor-pointer transition-all ${
+                      ticket.status === 'Done'
+                        ? 'bg-green-500/10 border-green-500/30 opacity-80 hover:border-green-400'
+                        : isMyTicket
+                        ? 'bg-[#FF3B30]/10 border-[#FF3B30]/40 hover:border-[#FF3B30]'
+                        : 'bg-[#1C1C1E] border-white/10 hover:border-[#FF3B30]/50'
+                    }`}
+                  >
+                    <p
+                      className={`text-sm font-medium mb-2 ${
+                        ticket.status === 'Done'
+                          ? 'text-green-400 line-through decoration-green-400/70'
+                          : isMyTicket
+                          ? 'text-[#FF6B60] underline decoration-[#FF3B30]/60 underline-offset-4'
+                          : 'text-white'
+                      }`}
+                    >
+                      {ticket.title}
+                    </p>
+
+                    <p className="text-xs text-[#8E8E93] mb-3">
+                      {ticket.assignee || 'Sin asignar'}
+                    </p>
+
+                    <div className="flex items-center justify-between">
+                      <Badge className={priorityColors[ticket.priority] || priorityColors.Medium}>
+                        {ticket.priority || 'Medium'}
+                      </Badge>
+
+                      <span className="text-xs text-[#8E8E93]">
+                        {ticket.estimatedHours ?? 'N/A'}h
+                      </span>
+                    </div>
+                  </div>
+                );
+              })
+            ) : (
+              <p className="text-xs text-[#8E8E93] text-center py-4">
+                Sin tickets
+              </p>
+            )}
+          </div>
+        </div>
+      );
+    })}
+  </div>
+)}
+  </div>
+</section>
 
         {}
         <section>
@@ -1487,870 +1658,70 @@ if (projectLoadError && !backendProject) {
           
         </section>
 
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-          {}
-          <section className="lg:col-span-2">
-            <div className="flex items-center justify-between mb-6">
-              <h2 className="text-xl font-semibold text-white flex items-center gap-2">
-                <ListTodo className="w-5 h-5 text-[#FF3B30]" />
-                Gestión Ágil
-              </h2>
-              
-              {}
-              {canManageProject && <button onClick={() => setShowSprintModal(true)} className="px-4 py-2 bg-[#FF3B30] hover:bg-[#FF3B30]/90 rounded-lg text-white text-sm font-medium transition-all flex items-center gap-2">
-                  <Plus className="w-4 h-4" />
-                  Crear Sprint
-                </button>}
-            </div>
-            
-            {}
-            <div className="mb-6 bg-[#007AFF]/10 border border-[#007AFF]/20 rounded-xl p-4">
-              <div className="flex items-start gap-3">
-                <Info className="w-5 h-5 text-[#007AFF] flex-shrink-0 mt-0.5" />
-                <div className="flex-1">
-                  <p className="text-sm text-white font-medium mb-1">
-                    {sprintFilter === 'active'
-                      ? `🏃 Sprints activos: ${backlogTickets.length} tickets visibles`
-                      : sprintFilter === 'history'
-                      ? `✅ Historial: ${backlogTickets.length} tickets de sprints cerrados`
-                      : sprintFilter === 'upcoming'
-                      ? `📅 Próximos sprints: ${backlogTickets.length} tickets planeados`
-                      : sprintFilter === 'all'
-                      ? `📊 Todos los sprints: ${backlogTickets.length} tickets en total`
-                      : `${selectedSprintFromFilter?.status === 'Completed' ? '✅' : selectedSprintFromFilter?.status === 'Upcoming' ? '📅' : '🏃'} ${selectedSprintFromFilter?.name || 'Sprint'}: ${backlogTickets.length} tickets`}
-                  </p>
-                  <p className="text-xs text-[#8E8E93]">
-                    {sprintFilter === 'active'
-                      ? 'Mostrando únicamente tickets de sprints activos. Los sprints cerrados quedan ocultos por defecto.'
-                      : sprintFilter === 'history'
-                      ? 'Mostrando tickets históricos de sprints concluidos.'
-                      : sprintFilter === 'upcoming'
-                      ? 'Mostrando tickets de sprints planeados.'
-                      : sprintFilter === 'all'
-                      ? 'Mostrando todos los tickets del proyecto, incluyendo activos, próximos y cerrados.'
-                      : `Tickets del sprint: ${selectedSprintFromFilter?.duration || 'Sin rango de fechas'}`}
-                  </p>
-                </div>
-                
-                {}
-                {canManageProject && !generalSprintFilters.includes(sprintFilter) && selectedSprintFromFilter?.status === 'Upcoming' && <button onClick={() => handleStartSprint(sprintFilter)} className="px-4 py-2 bg-blue-500 hover:bg-blue-600 rounded-lg text-white text-sm font-medium transition-all flex items-center gap-2 flex-shrink-0">
-                    <PlayCircle className="w-4 h-4" />
-                    Iniciar Sprint
-                  </button>}
+<div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+  {}
+  <section>
+    <div className="flex items-center justify-between mb-6">
+      <h2 className="text-xl font-semibold text-white flex items-center gap-2">
+        <Trophy className="w-5 h-5 text-[#FF3B30]" />
+        Gamificación
+      </h2>
+    </div>
 
-                {canManageProject && !generalSprintFilters.includes(sprintFilter) && selectedSprintFromFilter?.status === 'Active' && <button onClick={() => setShowCompleteSprintModal(true)} className="px-4 py-2 bg-green-500 hover:bg-green-600 rounded-lg text-white text-sm font-medium transition-all flex items-center gap-2 flex-shrink-0">
-                    <CheckCircle2 className="w-4 h-4" />
-                    Concluir Sprint
-                  </button>}
-              </div>
-            </div>
-            
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              {}
-              <div className="bg-[#1C1C1E] border border-white/10 rounded-xl overflow-hidden backdrop-blur-xl lg:col-span-2">
-                <div className="flex items-center justify-between p-6 border-b border-white/10">
-                  <div className="flex items-center gap-2">
-                    <h3 className="font-semibold text-white">
-                      {sprintFilter === 'active'
-                        ? 'Tickets - Sprints Activos'
-                        : sprintFilter === 'history'
-                        ? 'Tickets - Historial / Sprints Cerrados'
-                        : sprintFilter === 'upcoming'
-                        ? 'Tickets - Próximos Sprints'
-                        : sprintFilter === 'all'
-                        ? 'Todos los Tickets'
-                        : `Tickets - ${selectedSprintFromFilter?.name || 'Sprint'}`}
-                    </h3>
-                    <Badge>{parentTicketsOnly.length} tickets</Badge>
-                    {backlogTickets.length !== parentTicketsOnly.length && <span className="text-xs text-[#8E8E93]">({backlogTickets.length} total con subtickets)</span>}
-                  </div>
-                  <div className="flex items-center gap-3">
-                    {}
-                    <div className="flex items-center gap-1 bg-[#0F0F0F] border border-white/10 rounded-lg p-1">
-                      <button onClick={() => setTicketsView('table')} className={`flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-medium transition-all ${ticketsView === 'table' ? 'bg-[#FF3B30] text-white' : 'text-[#8E8E93] hover:text-white'}`}>
-                        <Table className="w-3.5 h-3.5" />
-                        Tabla
-                      </button>
-                      <button onClick={() => setTicketsView('kanban')} className={`flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-medium transition-all ${ticketsView === 'kanban' ? 'bg-[#FF3B30] text-white' : 'text-[#8E8E93] hover:text-white'}`}>
-                        <LayoutGrid className="w-3.5 h-3.5" />
-                        Kanban
-                      </button>
-                    </div>
-                    
-                    {}
-                    {role === 'DEVELOPER' && <button onClick={() => setShowMyTicketsOnly(!showMyTicketsOnly)} className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium transition-all border ${showMyTicketsOnly ? 'bg-[#FF3B30] text-white border-[#FF3B30]' : 'bg-[#0F0F0F] text-[#8E8E93] border-white/10 hover:text-white hover:border-[#FF3B30]/50'}`}>
-                        <Users className="w-3.5 h-3.5" />
-                        Solo mis tickets
-                      </button>}
-                    
-                    {canManageProject && <Button variant="outline" icon={Plus} onClick={() => {
-                    const sprintIdForNewTicket = canCreateTicketInCurrentFilter
-                      ? sprintFilter
-                      : activeSprint?.id || '';
+    <div className="bg-[#1C1C1E] border border-white/10 rounded-xl p-6 backdrop-blur-xl">
+      <div className="flex items-center justify-center min-h-[260px]">
+        <div className="text-center max-w-sm">
+          <Trophy className="w-10 h-10 text-[#8E8E93] mx-auto mb-4" />
 
-                    if (!sprintIdForNewTicket) {
-                      alert('Primero inicia o selecciona un sprint específico para crear tickets.');
-                      return;
-                    }
+          <p className="text-white font-semibold text-lg mb-2">
+            Módulo no disponible
+          </p>
 
-                    setTicketData({
-                      ...ticketData,
-                      sprintId: sprintIdForNewTicket
-                    });
-                    setShowTicketModal(true);
-                  }} className="text-xs py-1 px-3">
-                        Crear Ticket
-                      </Button>}
-                  </div>
-                </div>
+          <p className="text-sm text-[#8E8E93] leading-relaxed">
+            La gamificación todavía no existe en el backend.
+          </p>
 
-                {}
-                {ticketsView === 'table' && <div className="overflow-y-auto max-h-[600px]">
-                    <table className="w-full">
-                      <thead className="sticky top-0 z-10">
-                        <tr className="border-b border-white/10 bg-[#0F0F0F]/50">
-                          <th className="text-left px-4 py-3 text-xs font-medium text-[#8E8E93] uppercase tracking-wider">Key</th>
-                          <th className="text-left px-4 py-3 text-xs font-medium text-[#8E8E93] uppercase tracking-wider">Summary</th>
-                          <th className="text-left px-4 py-3 text-xs font-medium text-[#8E8E93] uppercase tracking-wider">Assignee</th>
-                          <th className="text-left px-4 py-3 text-xs font-medium text-[#8E8E93] uppercase tracking-wider">Priority</th>
-                          <th className="text-left px-4 py-3 text-xs font-medium text-[#8E8E93] uppercase tracking-wider">Status</th>
-                          <th className="text-left px-4 py-3 text-xs font-medium text-[#8E8E93] uppercase tracking-wider">Estimation</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-white/10">
-                        {parentTicketsOnly.map(ticket => {
-                      const isMyTicket = ticket.assignee === user.name || ticket.assignee.includes(user.name);
-                      const subTickets = getSubTickets(ticket.id);
-                      const hasSubTickets = subTickets.length > 0;
-                      return <>
-                              {}
-                              <tr key={ticket.id} onClick={() => setSelectedTicket(ticket)} className={`hover:bg-white/5 transition-colors cursor-pointer ${ticket.status === 'Done' ? 'bg-green-500/5 border-l-4 border-l-green-500' : isMyTicket ? 'bg-[#FF3B30]/5 border-l-2 border-l-[#FF3B30]' : ''}`}>
-                                <td className="px-4 py-3">
-                                  <div className="flex items-center gap-2">
-                                    {hasSubTickets && <GitBranch className="w-3.5 h-3.5 text-purple-400" />}
-                                    <span className="text-xs font-mono text-[#FF3B30] font-medium">{ticket.id}</span>
-                                    {isMyTicket && <span className="w-1.5 h-1.5 bg-[#FF3B30] rounded-full"></span>}
-                                    {ticket.status === 'Done' && <CheckCircle2 className="w-3.5 h-3.5 text-green-500" />}
-                                  </div>
-                                </td>
-                                <td className="px-4 py-3">
-                                  <div className="flex items-center gap-2">
-                                    <span className={`text-sm ${ticket.status === 'Done' ? 'text-green-400 line-through decoration-green-500 decoration-2' : isMyTicket ? 'text-white font-medium' : 'text-white'}`}>
-                                      {ticket.title}
-                                    </span>
-                                    {hasSubTickets && <span className="text-xs text-purple-400">({subTickets.length} subtasks)</span>}
-                                  </div>
-                                </td>
-                                <td className="px-4 py-3">
-                                  <div className="flex items-center gap-2">
-                                    <div className={`w-6 h-6 rounded-full flex items-center justify-center ${isMyTicket ? 'bg-[#FF3B30] ring-2 ring-[#FF3B30]/30' : 'bg-[#FF3B30]/10'}`}>
-                                      <span className={`text-xs font-medium ${isMyTicket ? 'text-white' : 'text-[#FF3B30]'}`}>
-                                        {ticket.assignee.split(' ').map(n => n[0]).join('')}
-                                      </span>
-                                    </div>
-                                    <span className={`text-sm ${isMyTicket ? 'text-white font-medium' : 'text-[#8E8E93]'}`}>
-                                      {ticket.assignee}
-                                    </span>
-                                  </div>
-                                </td>
-                                <td className="px-4 py-3">
-                                  <span className={`inline-flex items-center px-2 py-1 rounded text-xs font-medium ${priorityColors[ticket.priority]}`}>
-                                    {ticket.priority}
-                                  </span>
-                                </td>
-                                <td className="px-4 py-3">
-                                  {hasSubTickets ? <div className="flex items-center gap-2">
-                                      <div className="w-20 h-2 bg-white/10 rounded-full overflow-hidden">
-                                        <div className="h-full bg-gradient-to-r from-green-500 to-green-400 transition-all" style={{
-                                  width: `${getTicketProgress(ticket)}%`
-                                }} />
-                                      </div>
-                                      <span className="text-xs text-[#8E8E93]">{getTicketProgress(ticket)}%</span>
-                                    </div> : <Badge variant={ticket.status === 'Blocked' ? 'danger' : 'default'}>
-                                      {ticket.status}
-                                    </Badge>}
-                                </td>
-                                <td className="px-4 py-3">
-                                  <span className="text-sm text-white">{ticket.estimation} pts</span>
-                                </td>
-                              </tr>
-
-                              {}
-                              {subTickets.map(subTicket => {
-                          const isMySubTicket = subTicket.assignee === user.name || subTicket.assignee.includes(user.name);
-                          return <tr key={subTicket.id} onClick={() => setSelectedTicket(subTicket)} className={`hover:bg-white/5 transition-colors cursor-pointer bg-purple-500/5 ${subTicket.status === 'Done' ? 'opacity-60' : ''}`}>
-                                    <td className="px-4 py-2 pl-12">
-                                      <div className="flex items-center gap-2">
-                                        <span className="text-xs font-mono text-purple-400 font-medium">{subTicket.id}</span>
-                                        {subTicket.status === 'Done' && <CheckCircle2 className="w-3 h-3 text-green-500" />}
-                                      </div>
-                                    </td>
-                                    <td className="px-4 py-2">
-                                      <span className={`text-xs ${subTicket.status === 'Done' ? 'text-green-400 line-through' : 'text-[#8E8E93]'}`}>
-                                        └─ {subTicket.title}
-                                      </span>
-                                    </td>
-                                    <td className="px-4 py-2">
-                                      <span className="text-xs text-[#8E8E93]">{subTicket.assignee}</span>
-                                    </td>
-                                    <td className="px-4 py-2">
-                                      <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium ${priorityColors[subTicket.priority]}`}>
-                                        {subTicket.priority}
-                                      </span>
-                                    </td>
-                                    <td className="px-4 py-2">
-                                      <Badge variant={subTicket.status === 'Blocked' ? 'danger' : 'default'} className="text-[10px] px-1.5 py-0.5">
-                                        {subTicket.status}
-                                      </Badge>
-                                    </td>
-                                    <td className="px-4 py-2">
-                                      <span className="text-xs text-[#8E8E93]">{subTicket.estimation} pts</span>
-                                    </td>
-                                  </tr>;
-                        })}
-                            </>;
-                    })}
-                      </tbody>
-                    </table>
-                    {backlogTickets.length === 0 && <div className="py-12 px-6 text-center">
-                        <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-[#FF3B30]/10 mb-4">
-                          <ListTodo className="w-8 h-8 text-[#FF3B30]" />
-                        </div>
-                        <h4 className="text-base font-semibold text-white mb-2">
-                          {sprintFilter === 'active'
-                            ? 'No hay tickets en sprints activos'
-                            : sprintFilter === 'history'
-                            ? 'No hay tickets históricos'
-                            : sprintFilter === 'upcoming'
-                            ? 'No hay tickets planeados'
-                            : sprintFilter === 'all'
-                            ? 'No hay tickets en el proyecto'
-                            : 'Sprint vacío'}
-                        </h4>
-                        <p className="text-sm text-[#8E8E93] mb-4">
-                          {sprintFilter === 'history'
-                            ? 'Los tickets aparecerán aquí cuando concluyas sprints.'
-                            : sprintFilter === 'active'
-                            ? 'Inicia un sprint o crea tickets en un sprint activo para verlos aquí.'
-                            : sprintFilter === 'upcoming'
-                            ? 'Selecciona un sprint futuro específico para planear tickets.'
-                            : 'Este sprint no tiene tickets asignados aún. Crea tickets para comenzar a llenar el backlog y el Gantt.'}
-                        </p>
-                        {canManageProject && sprintFilter !== 'history' && <button onClick={() => {
-                          const sprintIdForNewTicket = canCreateTicketInCurrentFilter
-                            ? sprintFilter
-                            : activeSprint?.id || '';
-
-                          if (!sprintIdForNewTicket) {
-                            alert('Primero inicia o selecciona un sprint específico para crear tickets.');
-                            return;
-                          }
-
-                          setTicketData({
-                            ...ticketData,
-                            sprintId: sprintIdForNewTicket,
-                          });
-                          setShowTicketModal(true);
-                        }} className="inline-flex items-center gap-2 px-4 py-2 bg-[#FF3B30] hover:bg-[#FF3B30]/90 rounded-lg text-white text-sm font-medium transition-all">
-                            <Plus className="w-4 h-4" />
-                            Crear Primer Ticket
-                          </button>}
-                      </div>}
-                  </div>}
-
-                {}
-                {ticketsView === 'kanban' && <div className="p-6">
-                    <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                      {['Backlog', 'In Progress', 'Done', 'Blocked'].map(status => {
-                    const statusTickets = backlogTickets.filter(t => t.status === status);
-                    const totalPoints = statusTickets.reduce((sum, t) => sum + t.estimation, 0);
-                    return <div key={status} className="bg-[#0F0F0F] border border-white/10 rounded-xl overflow-hidden">
-                            <div className="p-4 border-b border-white/10">
-                              <div className="flex items-center justify-between mb-1">
-                                <h4 className="text-sm font-semibold text-white">{status}</h4>
-                                <Badge>{statusTickets.length}</Badge>
-                              </div>
-                              <p className="text-xs text-[#8E8E93]">{totalPoints} pts</p>
-                            </div>
-                            <div className="p-3 space-y-3 max-h-[600px] overflow-y-auto">
-                              {statusTickets.map(ticket => {
-                          const isMyTicket = ticket.assignee === user.name || ticket.assignee.includes(user.name);
-                          return <div key={ticket.id} onClick={() => setSelectedTicket(ticket)} className={`bg-[#1C1C1E] border rounded-lg p-3 cursor-pointer hover:border-[#FF3B30]/50 transition-all group ${ticket.status === 'Done' ? 'border-green-500 ring-2 ring-green-500/20 bg-green-500/5' : isMyTicket ? 'border-[#FF3B30] ring-2 ring-[#FF3B30]/20' : 'border-white/10'}`}>
-                                    <div className="flex items-start justify-between mb-2">
-                                      <div className="flex items-center gap-2">
-                                        <span className="text-xs font-mono text-[#FF3B30] font-medium">{ticket.id}</span>
-                                        {ticket.status === 'Done' && <CheckCircle2 className="w-3.5 h-3.5 text-green-500" />}
-                                      </div>
-                                      {isMyTicket && !ticket.status.includes('Done') && <span className="text-[10px] bg-[#FF3B30] text-white px-1.5 py-0.5 rounded font-medium">
-                                          TU
-                                        </span>}
-                                      {ticket.status === 'Done' && <span className="text-[10px] bg-green-500 text-white px-1.5 py-0.5 rounded font-medium">
-                                          ✓
-                                        </span>}
-                                    </div>
-                                    <p className={`text-sm mb-3 line-clamp-2 ${ticket.status === 'Done' ? 'text-green-400 line-through decoration-green-500 decoration-2' : isMyTicket ? 'text-white font-medium' : 'text-white'}`}>
-                                      {ticket.title}
-                                    </p>
-                                    <div className="flex items-center justify-between">
-                                      <div className="flex items-center gap-2">
-                                        <div className={`w-6 h-6 rounded-full flex items-center justify-center ${isMyTicket ? 'bg-[#FF3B30] ring-2 ring-[#FF3B30]/30' : 'bg-[#FF3B30]/10'}`}>
-                                          <span className={`text-xs font-medium ${isMyTicket ? 'text-white' : 'text-[#FF3B30]'}`}>
-                                            {ticket.assignee.split(' ').map(n => n[0]).join('')}
-                                          </span>
-                                        </div>
-                                        <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium ${priorityColors[ticket.priority]}`}>
-                                          {ticket.priority}
-                                        </span>
-                                      </div>
-                                      <span className="text-xs text-[#8E8E93] font-medium">{ticket.estimation} pts</span>
-                                    </div>
-                                  </div>;
-                        })}
-                              {statusTickets.length === 0 && <p className="text-xs text-[#8E8E93] text-center py-8">
-                                  Sin tickets
-                                </p>}
-                            </div>
-                          </div>;
-                  })}
-                    </div>
-                  </div>}
-              </div>
-
-              {}
-              {!generalSprintFilters.includes(sprintFilter) && (() => {
-              const selectedSprint = project.sprints.find(s => s.id === sprintFilter);
-              if (!selectedSprint) return null;
-              return <div className="bg-[#1C1C1E] border border-white/10 rounded-xl p-6 backdrop-blur-xl lg:col-span-2">
-                    <div className="flex items-center justify-between mb-6">
-                      <div>
-                        <h3 className="font-semibold text-white text-lg">
-                          {role === 'DEVELOPER' ? 'Mi Progreso Personal' : selectedSprint.name}
-                        </h3>
-                        <p className="text-sm text-[#8E8E93] mt-1">
-                          {role === 'DEVELOPER' ? 'Métricas de mi trabajo en este sprint' : selectedSprint.duration}
-                        </p>
-                      </div>
-                      <Badge variant={selectedSprint.status === 'Active' ? 'warning' : selectedSprint.status === 'Completed' ? 'default' : 'default'}>
-                        {selectedSprint.status}
-                      </Badge>
-                    </div>
-
-                    {role === 'DEVELOPER' ? <>
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-                          {}
-                          <div className="bg-[#0F0F0F] border border-white/10 rounded-lg p-4">
-                            <div className="flex items-center justify-between mb-2">
-                              <span className="text-xs text-[#8E8E93]">Mi Progreso</span>
-                              <span className="text-lg font-bold text-white">75%</span>
-                            </div>
-                            <div className="w-full bg-[#1C1C1E] rounded-full h-2">
-                              <div className="bg-[#007AFF] h-2 rounded-full transition-all" style={{
-                          width: '75%'
-                        }}></div>
-                            </div>
-                            <p className="text-xs text-[#8E8E93] mt-2">6/8 tickets completados</p>
-                          </div>
-
-                          {}
-                          <div className="bg-[#0F0F0F] border border-white/10 rounded-lg p-4">
-                            <div className="flex items-center justify-between mb-2">
-                              <span className="text-xs text-[#8E8E93]">Mis Horas</span>
-                              <span className="text-lg font-bold text-white">32h / 40h</span>
-                            </div>
-                            <div className="w-full bg-[#1C1C1E] rounded-full h-2">
-                              <div className="bg-green-500 h-2 rounded-full transition-all" style={{
-                          width: '80%'
-                        }}></div>
-                            </div>
-                            <p className="text-xs text-[#8E8E93] mt-2">8h restantes</p>
-                          </div>
-
-                          {}
-                          <div className="bg-[#0F0F0F] border border-white/10 rounded-lg p-4">
-                            <div className="flex items-center justify-between mb-2">
-                              <span className="text-xs text-[#8E8E93]">Mis Tickets</span>
-                              <span className="text-lg font-bold text-white">8</span>
-                            </div>
-                            <div className="flex items-center gap-2 text-xs text-[#8E8E93]">
-                              <span>✅ 6</span>
-                              <span>🏃 2</span>
-                              <span>📋 0</span>
-                              <span>🚫 0</span>
-                            </div>
-                          </div>
-                        </div>
-
-                        {}
-                        <div className="bg-[#0F0F0F] border border-white/10 rounded-lg p-4">
-                          <h4 className="text-sm font-semibold text-white mb-4">Mi Burndown Personal</h4>
-                          <ResponsiveContainer width="100%" height={200}>
-                            <LineChart data={[{
-                        day: 'D1',
-                        ideal: 40,
-                        remaining: 40
-                      }, {
-                        day: 'D2',
-                        ideal: 36,
-                        remaining: 38
-                      }, {
-                        day: 'D3',
-                        ideal: 32,
-                        remaining: 34
-                      }, {
-                        day: 'D4',
-                        ideal: 28,
-                        remaining: 28
-                      }, {
-                        day: 'D5',
-                        ideal: 24,
-                        remaining: 24
-                      }, {
-                        day: 'D6',
-                        ideal: 20,
-                        remaining: 18
-                      }, {
-                        day: 'D7',
-                        ideal: 16,
-                        remaining: 14
-                      }, {
-                        day: 'D8',
-                        ideal: 12,
-                        remaining: 10
-                      }, {
-                        day: 'D9',
-                        ideal: 8,
-                        remaining: 8
-                      }, {
-                        day: 'D10',
-                        ideal: 4,
-                        remaining: 8
-                      }]}>
-                              <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
-                              <XAxis dataKey="day" stroke="#8E8E93" tick={{
-                          fill: '#8E8E93',
-                          fontSize: 10
-                        }} label={{
-                          value: 'Día',
-                          position: 'insideBottom',
-                          offset: -5,
-                          fill: '#8E8E93',
-                          fontSize: 10
-                        }} />
-                              <YAxis stroke="#8E8E93" tick={{
-                          fill: '#8E8E93',
-                          fontSize: 10
-                        }} label={{
-                          value: 'Horas',
-                          angle: -90,
-                          position: 'insideLeft',
-                          fill: '#8E8E93',
-                          fontSize: 10
-                        }} />
-                              <Tooltip contentStyle={{
-                          backgroundColor: '#0F0F0F',
-                          border: '1px solid rgba(255,255,255,0.1)',
-                          borderRadius: '8px',
-                          fontSize: '11px'
-                        }} />
-                              <Line name="Ideal" type="monotone" dataKey="ideal" stroke="#8E8E93" strokeWidth={2} strokeDasharray="5 5" dot={false} />
-                              <Line name="Mis Horas Restantes" type="monotone" dataKey="remaining" stroke="#007AFF" strokeWidth={3} dot={{
-                          fill: '#007AFF',
-                          r: 4
-                        }} />
-                            </LineChart>
-                          </ResponsiveContainer>
-                        </div>
-                      </> : <>
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-                          {}
-                          <div className="bg-[#0F0F0F] border border-white/10 rounded-lg p-4">
-                            <div className="flex items-center justify-between mb-2">
-                              <span className="text-xs text-[#8E8E93]">Progreso</span>
-                              <span className="text-lg font-bold text-white">{selectedSprint.progress}%</span>
-                            </div>
-                            <div className="w-full bg-[#1C1C1E] rounded-full h-2">
-                              <div className="bg-[#007AFF] h-2 rounded-full transition-all" style={{
-                          width: `${selectedSprint.progress}%`
-                        }}></div>
-                            </div>
-                          </div>
-
-                          {}
-                          <div className="bg-[#0F0F0F] border border-white/10 rounded-lg p-4">
-                            <div className="flex items-center justify-between mb-2">
-                              <span className="text-xs text-[#8E8E93]">Capacidad</span>
-                              <span className="text-lg font-bold text-white">{selectedSprint.used}h / {selectedSprint.capacity}h</span>
-                            </div>
-                            <div className="w-full bg-[#1C1C1E] rounded-full h-2">
-                              <div className={`h-2 rounded-full transition-all ${selectedSprint.used > selectedSprint.capacity ? 'bg-[#FF3B30]' : 'bg-green-500'}`} style={{
-                          width: `${Math.min(selectedSprint.used / selectedSprint.capacity * 100, 100)}%`
-                        }}></div>
-                            </div>
-                          </div>
-
-                          {}
-                          <div className="bg-[#0F0F0F] border border-white/10 rounded-lg p-4">
-                            <div className="flex items-center justify-between mb-2">
-                              <span className="text-xs text-[#8E8E93]">Tickets</span>
-                              <span className="text-lg font-bold text-white">{backlogTickets.length}</span>
-                            </div>
-                            <div className="flex items-center gap-2 text-xs text-[#8E8E93]">
-                              <span>✅ {backlogTickets.filter(t => t.status === 'Done').length}</span>
-                              <span>🏃 {backlogTickets.filter(t => t.status === 'In Progress').length}</span>
-                              <span>📋 {backlogTickets.filter(t => t.status === 'Backlog').length}</span>
-                              <span>🚫 {backlogTickets.filter(t => t.status === 'Blocked').length}</span>
-                            </div>
-                          </div>
-                        </div>
-
-                        {}
-                        <div className="bg-[#0F0F0F] border border-white/10 rounded-lg p-4">
-                          <h4 className="text-sm font-semibold text-white mb-4">Burndown Chart</h4>
-                          <ResponsiveContainer width="100%" height={200}>
-                            <LineChart data={selectedSprint.burndownData}>
-                              <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
-                              <XAxis dataKey="day" stroke="#8E8E93" tick={{
-                          fill: '#8E8E93',
-                          fontSize: 10
-                        }} label={{
-                          value: 'Día',
-                          position: 'insideBottom',
-                          offset: -5,
-                          fill: '#8E8E93',
-                          fontSize: 10
-                        }} />
-                              <YAxis stroke="#8E8E93" tick={{
-                          fill: '#8E8E93',
-                          fontSize: 10
-                        }} label={{
-                          value: 'Story Points',
-                          angle: -90,
-                          position: 'insideLeft',
-                          fill: '#8E8E93',
-                          fontSize: 10
-                        }} />
-                              <Tooltip contentStyle={{
-                          backgroundColor: '#0F0F0F',
-                          border: '1px solid rgba(255,255,255,0.1)',
-                          borderRadius: '8px',
-                          fontSize: '11px'
-                        }} />
-                              <Line name="Ideal" type="monotone" dataKey="ideal" stroke="#8E8E93" strokeWidth={2} strokeDasharray="5 5" dot={false} />
-                              <Line name="Real" type="monotone" dataKey="remaining" stroke="#007AFF" strokeWidth={3} dot={{
-                          fill: '#007AFF',
-                          r: 4
-                        }} />
-                            </LineChart>
-                          </ResponsiveContainer>
-                        </div>
-                      </>}
-
-                    {}
-                    
-                  </div>;
-            })()}
-            </div>
-          </section>
-
-          {}
-          <section className="lg:col-span-2">
-            <div className="flex items-center justify-between mb-6">
-              <h2 className="text-xl font-semibold text-white flex items-center gap-2">
-                <BarChart3 className="w-5 h-5 text-[#FF3B30]" />
-                Diagrama de Gantt
-                {!generalSprintFilters.includes(sprintFilter) && <Badge className="ml-2">{selectedSprintFromFilter?.name}</Badge>}
-              </h2>
-              
-              {}
-              {role === 'DEVELOPER' && <button onClick={() => setShowMyTicketsOnly(!showMyTicketsOnly)} className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium transition-all border ${showMyTicketsOnly ? 'bg-[#FF3B30] text-white border-[#FF3B30]' : 'bg-[#0F0F0F] text-[#8E8E93] border-white/10 hover:text-white hover:border-[#FF3B30]/50'}`}>
-                  <Users className="w-3.5 h-3.5" />
-                  Solo mis tickets
-                </button>}
-            </div>
-            
-            <div className="bg-[#1C1C1E] border border-white/10 rounded-xl p-6 backdrop-blur-xl">
-              {backlogTickets.length > 0 ? (() => {
-              const allDates = backlogTickets.flatMap(t => [new Date(t.startDate), new Date(t.endDate)]);
-              const minDate = new Date(Math.min(...allDates.map(d => d.getTime())));
-              const maxDate = new Date(Math.max(...allDates.map(d => d.getTime())));
-              const totalDays = Math.ceil((maxDate.getTime() - minDate.getTime()) / (1000 * 60 * 60 * 24)) + 1;
-              const sortedTickets = [...backlogTickets].sort((a, b) => new Date(a.startDate).getTime() - new Date(b.startDate).getTime());
-              return <div className="overflow-x-auto -mx-6 px-6">
-                      <div className="space-y-3 overflow-y-auto max-h-[500px] min-w-[900px]">
-                        {sortedTickets.map(ticket => {
-                    const startDate = new Date(ticket.startDate);
-                    const endDate = new Date(ticket.endDate);
-                    const duration = Math.ceil((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24)) + 1;
-                    const daysFromStart = Math.ceil((startDate.getTime() - minDate.getTime()) / (1000 * 60 * 60 * 24));
-                    const leftPercent = daysFromStart / totalDays * 100;
-                    const widthPercent = duration / totalDays * 100;
-                    const isMyTicket = role === 'DEVELOPER' && (ticket.assignee === user.name || ticket.assignee.includes(user.name));
-                    return <div key={ticket.id} className={`relative rounded-lg transition-all ${isMyTicket ? 'bg-gradient-to-r from-[#FF3B30]/20 via-[#FF3B30]/10 to-transparent border-2 border-[#FF3B30]/40 p-2 shadow-lg shadow-[#FF3B30]/20' : 'p-1'}`}>
-                          <div className="flex items-center gap-3 mb-2">
-                            <div className="w-40 flex-shrink-0">
-                              <div className="flex items-center gap-2">
-                                <p className={`text-sm font-medium truncate ${isMyTicket ? 'text-white font-bold' : 'text-white'}`}>
-                                  {ticket.title}
-                                </p>
-                                {isMyTicket && <span className="text-[10px] bg-[#FF3B30] text-white px-2 py-1 rounded-md font-bold flex-shrink-0 shadow-md shadow-[#FF3B30]/50 animate-pulse">
-                                    TÚ
-                                  </span>}
-                              </div>
-                              <div className="flex items-center gap-2 mt-1">
-                                <span className={`text-xs font-medium ${isMyTicket ? 'text-[#FF3B30]' : 'text-[#8E8E93]'}`}>
-                                  {ticket.assignee}
-                                </span>
-                                <span className={`text-[10px] px-2 py-0.5 rounded ${priorityColors[ticket.priority]}`}>
-                                  {ticket.priority}
-                                </span>
-                              </div>
-                            </div>
-                            
-                            <div className={`flex-1 relative h-12 rounded-lg ${isMyTicket ? 'bg-[#0F0F0F] ring-2 ring-[#FF3B30]/30' : 'bg-[#0F0F0F]'}`}>
-                              <div className={`absolute rounded transition-all ${isMyTicket && ticket.status === 'Done' ? 'h-full bg-gradient-to-r from-green-500/60 to-green-400/60 border-[3px] border-green-400 shadow-lg shadow-green-500/40' : isMyTicket && ticket.status === 'In Progress' ? 'h-full bg-gradient-to-r from-blue-500/60 to-blue-400/60 border-[3px] border-blue-400 shadow-lg shadow-blue-500/40' : isMyTicket && ticket.status === 'Blocked' ? 'h-full bg-gradient-to-r from-[#FF3B30]/60 to-orange-500/60 border-[3px] border-[#FF3B30] shadow-lg shadow-[#FF3B30]/40' : isMyTicket ? 'h-full bg-gradient-to-r from-[#8E8E93]/60 to-[#6E6E73]/60 border-[3px] border-[#8E8E93] shadow-lg shadow-[#8E8E93]/40' : ticket.status === 'Done' ? 'h-full bg-green-500/20 border border-green-500/50' : ticket.status === 'In Progress' ? 'h-full bg-blue-500/20 border border-blue-500/50' : ticket.status === 'Blocked' ? 'h-full bg-[#FF3B30]/20 border border-[#FF3B30]/50' : 'h-full bg-[#8E8E93]/20 border border-[#8E8E93]/50'} flex items-center justify-center`} style={{
-                            left: `${Math.max(0, Math.min(leftPercent, 95))}%`,
-                            width: `${Math.max(5, Math.min(widthPercent, 100 - leftPercent))}%`
-                          }}>
-                                <span className={`text-[10px] font-medium px-2 truncate ${isMyTicket ? 'text-white font-bold' : 'text-white'}`}>
-                                  {duration}d • {ticket.estimation}pts
-                                </span>
-                              </div>
-                            </div>
-                            
-                            <div className="w-24 flex-shrink-0 text-right">
-                              <p className={`text-xs ${isMyTicket ? 'text-white font-semibold' : 'text-white'}`}>
-                                {ticket.startDate}
-                              </p>
-                              <p className={`text-xs ${isMyTicket ? 'text-[#FF3B30]' : 'text-[#8E8E93]'}`}>
-                                {ticket.endDate}
-                              </p>
-                            </div>
-                          </div>
-                        </div>;
-                  })}
-                  </div>
-                  
-                  {}
-                  <div className="mt-6 pt-4 border-t border-white/10">
-                    <div className="flex items-center justify-between text-xs text-[#8E8E93]">
-                      <span>{minDate.toLocaleDateString()}</span>
-                      <span>Línea de tiempo ({totalDays} días)</span>
-                      <span>{maxDate.toLocaleDateString()}</span>
-                    </div>
-                  </div>
-                </div>;
-            })() : <div className="text-center py-12">
-                  <BarChart3 className="w-12 h-12 text-[#8E8E93] mx-auto mb-3 opacity-50" />
-                  <p className="text-sm text-[#8E8E93]">No hay tickets para mostrar en el Gantt</p>
-                </div>}
-            </div>
-          </section>
-
-          {}
-          {role !== 'DEVELOPER' && <section>
-              <h2 className="text-xl font-semibold text-white mb-6 flex items-center gap-2">
-                <AlertTriangle className="w-5 h-5 text-[#FF3B30]" />
-                Bloqueadores
-              </h2>
-              <div className="bg-[#1C1C1E] border border-white/10 rounded-xl p-6 backdrop-blur-xl">
-                {project.blockers.length > 0 ? <div className="space-y-3">
-                    {project.blockers.map(blocker => <div key={blocker.id} className="bg-[#0F0F0F] border border-white/10 rounded-lg p-4 hover:border-white/20 transition-all">
-                        <div className="flex items-start justify-between mb-2">
-                          <div className="flex items-center gap-2">
-                            <AlertCircle className={`w-4 h-4 ${blocker.severity === 'High' ? 'text-[#FF3B30]' : blocker.severity === 'Medium' ? 'text-yellow-500' : 'text-blue-500'}`} />
-                            <p className="text-sm font-medium text-white">{blocker.title}</p>
-                          </div>
-                          <Badge variant={blocker.status === 'Open' ? 'danger' : blocker.status === 'In Progress' ? 'warning' : 'default'}>
-                            {blocker.status}
-                          </Badge>
-                        </div>
-                        <p className="text-xs text-[#8E8E93] mb-2">{blocker.description}</p>
-                        <div className="flex items-center justify-between">
-                          <span className="text-xs text-[#8E8E93]">Asignado a: {blocker.assignee}</span>
-                          <Badge variant={blocker.severity === 'High' ? 'danger' : blocker.severity === 'Medium' ? 'warning' : 'default'}>
-                            {blocker.severity}
-                          </Badge>
-                        </div>
-                      </div>)}
-                  </div> : <div className="text-center py-8">
-                    <CheckCircle2 className="w-12 h-12 text-green-500 mx-auto mb-2" />
-                    <p className="text-sm text-[#8E8E93]">No hay bloqueadores activos</p>
-                  </div>}
-              </div>
-            </section>}
-
-          {}
-          {role !== 'DEVELOPER' && <section>
-              <h2 className="text-xl font-semibold text-white mb-6 flex items-center gap-2">
-              <Sparkles className="w-5 h-5 text-[#FF3B30]" />
-              IA & Riesgo
-            </h2>
-            <div className="bg-gradient-to-br from-[#FF3B30]/10 to-[#1C1C1E] border border-[#FF3B30]/20 rounded-xl p-6 backdrop-blur-xl">
-                <div className="flex items-center gap-3 mb-4">
-                  <div className="p-3 bg-[#FF3B30]/10 rounded-xl">
-                    <Shield className="w-6 h-6 text-[#FF3B30]" />
-                  </div>
-                  <div>
-                    <h3 className="font-semibold text-white">Clasificación Automática con IA</h3>
-                    <Badge variant="danger" className="mt-1">Riesgo {project.risk}</Badge>
-                  </div>
-                </div>
-                
-                <div className="bg-[#0F0F0F]/50 border border-white/10 rounded-lg p-4 mb-4">
-                  <div className="flex items-start gap-2 mb-3">
-                    <Sparkles className="w-4 h-4 text-[#FF3B30] flex-shrink-0 mt-0.5" />
-                    <p className="text-sm text-white/90 leading-relaxed">
-                      <span className="font-semibold text-white">Análisis Predictivo:</span> El proyecto presenta <span className="text-[#FF3B30] font-semibold">{project.delayedMilestones} hitos retrasados</span> y un 
-                      SPI de <span className="text-[#FF3B30] font-semibold">{project.spi}</span>. 
-                      La desviación del cronograma es de <span className="text-[#FF3B30] font-semibold">{project.scheduleVariance}%</span>.
-                      {project.blockedTickets > 0 && <> Además, hay <span className="text-[#FF3B30] font-semibold">{project.blockedTickets} tickets bloqueados</span> que requieren atención inmediata.</>}
-                    </p>
-                  </div>
-                  
-                  <div className="flex items-start gap-2 p-3 bg-[#FF3B30]/5 border border-[#FF3B30]/20 rounded-lg">
-                    <AlertTriangle className="w-4 h-4 text-[#FF3B30] flex-shrink-0 mt-0.5" />
-                    <div className="flex-1">
-                      <p className="text-xs font-semibold text-[#FF3B30] mb-1">Recomendaciones IA</p>
-                      <ul className="text-xs text-white/80 space-y-1">
-                        <li>• Priorizar resolución de bloqueadores críticos</li>
-                        <li>• Reasignar recursos al camino crítico</li>
-                        <li>• Considerar extensión de {Math.abs(project.scheduleVariance)} días</li>
-                      </ul>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-3">
-                  <Button variant="outline" icon={Zap} onClick={() => setShowScenarioPanel(true)} className="w-full hover:bg-[#FF3B30] hover:text-white hover:border-[#FF3B30] transition-all duration-300">
-                    Simular Escenario
-                  </Button>
-                  <Button variant="outline" icon={PlayCircle} onClick={() => setShowRecoveryPanel(true)} className="w-full hover:bg-[#FF3B30] hover:text-white hover:border-[#FF3B30] transition-all duration-300">
-                    Plan Recuperación
-                  </Button>
-                </div>
-              </div>
-            </section>}
+          <p className="text-xs text-[#8E8E93] mt-3">
+            Cuando se implemente, aquí aparecerán rankings,
+            badges, score y puntos reales.
+          </p>
         </div>
+      </div>
+    </div>
+  </section>
+
+  {}
+
+</div>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
           {}
-          <section>
-            <div className="flex items-center justify-between mb-6">
-              <h2 className="text-xl font-semibold text-white flex items-center gap-2">
-                <Trophy className="w-5 h-5 text-[#FF3B30]" />
-                Gamificación
-              </h2>
-              
-              {}
-              <div className="flex items-center gap-2 bg-[#1C1C1E] border border-white/10 rounded-lg p-1">
-                <button onClick={() => setGamificationView('project')} className={`px-3 py-1.5 rounded-md text-xs font-medium transition-all ${gamificationView === 'project' ? 'bg-[#FF3B30] text-white' : 'text-[#8E8E93] hover:text-white'}`}>
-                  Este Proyecto
-                </button>
-                <button onClick={() => setGamificationView('all')} className={`px-3 py-1.5 rounded-md text-xs font-medium transition-all ${gamificationView === 'all' ? 'bg-[#FF3B30] text-white' : 'text-[#8E8E93] hover:text-white'}`}>
-                  Todos los Proyectos
-                </button>
-              </div>
-            </div>
-            
-            <div className="bg-[#1C1C1E] border border-white/10 rounded-xl p-6 backdrop-blur-xl">
-              {}
-              <div className="text-center mb-6 pb-6 border-b border-white/10">
-                <p className="text-sm text-[#8E8E93] mb-2">
-                  {gamificationView === 'project' ? 'Score del Proyecto' : 'Score Total de Todos los Proyectos'}
-                </p>
-                <p className="text-4xl font-bold text-white">
-                  {gamificationView === 'project' ? project.gamification.projectScore.toLocaleString() : globalGamification.totalScore.toLocaleString()}
-                </p>
-                <p className="text-xs text-[#8E8E93] mt-1">puntos totales</p>
-              </div>
+ <section>
+  <h2 className="text-xl font-semibold text-white mb-6 flex items-center gap-2">
+    <Bell className="w-5 h-5 text-[#FF3B30]" />
+    Feed de Actividad
+  </h2>
 
-              {}
-              <div className="mb-6">
-                <p className="text-sm font-semibold text-white mb-3">Top Developers</p>
-                <div className="space-y-3">
-                  {(gamificationView === 'project' ? project.gamification.topDevelopers : globalGamification.topDevelopers).map((dev, index) => <div key={index} className="flex items-center gap-3 bg-[#0F0F0F] border border-white/10 rounded-lg p-3">
-                      <div className={`w-8 h-8 rounded-full flex items-center justify-center font-semibold text-sm ${index === 0 ? 'bg-yellow-500/20 text-yellow-500' : index === 1 ? 'bg-gray-400/20 text-gray-400' : 'bg-orange-500/20 text-orange-500'}`}>
-                        {dev.avatar}
-                      </div>
-                      <div className="flex-1">
-                        <p className="text-sm font-medium text-white">{dev.name}</p>
-                        <p className="text-xs text-[#8E8E93]">{dev.points.toLocaleString()} puntos</p>
-                      </div>
-                      <div className="flex items-center gap-1">
-                        {index === 0 && <Award className="w-5 h-5 text-yellow-500" />}
-                        {index === 1 && <Award className="w-5 h-5 text-gray-400" />}
-                        {index === 2 && <Award className="w-5 h-5 text-orange-500" />}
-                      </div>
-                    </div>)}
-                </div>
-              </div>
+  <div className="bg-[#1C1C1E] border border-white/10 rounded-xl p-6 backdrop-blur-xl">
+    <div className="flex items-center justify-center min-h-[260px]">
+      <div className="text-center max-w-sm">
+        <Bell className="w-10 h-10 text-[#8E8E93] mx-auto mb-4" />
 
-              {}
-              <div>
-                <p className="text-sm font-semibold text-white mb-3">Badges Obtenidos</p>
-                <div className="flex flex-wrap gap-2">
-                  {(gamificationView === 'project' ? project.gamification.badges : globalGamification.badges).map((badge, index) => <div key={index} className="px-3 py-1.5 bg-[#FF3B30]/10 border border-[#FF3B30]/20 rounded-lg">
-                      <span className="text-xs text-[#FF3B30] font-medium">{badge}</span>
-                    </div>)}
-                </div>
-              </div>
-            </div>
-          </section>
+        <p className="text-white font-semibold text-lg mb-2">
+          Sin actividad registrada
+        </p>
 
-          {}
-          <section>
-            <h2 className="text-xl font-semibold text-white mb-6 flex items-center gap-2">
-              <Bell className="w-5 h-5 text-[#FF3B30]" />
-              {role === 'DEVELOPER' ? 'Mis Notificaciones' : 'Feed de Actividad'}
-            </h2>
-            <div className="bg-[#1C1C1E] border border-white/10 rounded-xl p-6 backdrop-blur-xl">
-              <div className="space-y-4">
-                {(role === 'DEVELOPER' ? globalNotifications.filter(notification => notification.isPersonal && notification.assignedTo === user.name) : globalNotifications.filter(n => n.projectName === project.name || !n.isPersonal)).map(notification => {
-                const icons: Record<GlobalNotification['type'], any> = {
-                  ticket_completed: CheckCircle2,
-                  blocker_added: AlertTriangle,
-                  achievement: Star,
-                  ai_alert: Sparkles,
-                  deadline: Clock,
-                  ticket_assigned: ListTodo,
-                  weekly_performance: BarChart3,
-                  project_assigned: UserPlus,
-                  sprint_started: Rocket
-                };
-                const Icon = icons[notification.type];
-                const colors: Record<GlobalNotification['type'], string> = {
-                  ticket_completed: 'text-green-500 bg-green-500/10',
-                  blocker_added: 'text-[#FF3B30] bg-[#FF3B30]/10',
-                  achievement: 'text-yellow-400 bg-yellow-400/10',
-                  ai_alert: 'text-purple-500 bg-purple-500/10',
-                  deadline: 'text-orange-400 bg-orange-400/10',
-                  ticket_assigned: 'text-blue-400 bg-blue-400/10',
-                  weekly_performance: 'text-green-400 bg-green-400/10',
-                  project_assigned: 'text-purple-400 bg-purple-400/10',
-                  sprint_started: 'text-orange-400 bg-orange-400/10'
-                };
-                return <div key={notification.id} className="flex gap-3">
-                      <div className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 ${colors[notification.type]}`}>
-                        <Icon className="w-4 h-4" />
-                      </div>
-                      <div className="flex-1">
-                        <p className="text-sm font-medium text-white">{notification.title}</p>
-                        <p className="text-xs text-[#8E8E93] mt-0.5">{notification.description}</p>
-                        <div className="flex items-center gap-2 mt-1">
-                          <span className="text-xs text-[#8E8E93]">{notification.user}</span>
-                          <span className="text-xs text-[#8E8E93]">•</span>
-                          <span className="text-xs text-[#8E8E93]">{notification.timestamp}</span>
-                          {notification.projectName && notification.projectName !== 'Global' && <>
-                              <span className="text-xs text-[#8E8E93]">•</span>
-                              <span className="text-xs text-[#FF3B30]">{notification.projectName}</span>
-                            </>}
-                        </div>
-                      </div>
-                    </div>;
-              })}
-              </div>
-            </div>
-          </section>
+        <p className="text-sm text-[#8E8E93] leading-relaxed">
+          El backend todavía no tiene historial de eventos, notificaciones o auditoría.
+        </p>
+
+        <p className="text-xs text-[#8E8E93] mt-3">
+          Aquí aparecerán cambios de tickets, sprints y movimientos del equipo cuando exista ese módulo.
+        </p>
+      </div>
+    </div>
+  </div>
+</section>
         </div>
       </div>
 
@@ -2920,9 +2291,9 @@ setTicketData({
                     <div>
                       <div className="flex items-center justify-between mb-2">
                         <span className="text-xs text-[#8E8E93]">Developers Asignados</span>
-                        <span className="text-sm font-medium text-white">{project.team.length}</span>
+                        <span className="text-sm font-medium text-white">{projectTeam.length}</span>
                       </div>
-                      <input type="range" min="3" max="15" defaultValue={project.team.length} className="w-full h-2 bg-white/10 rounded-lg appearance-none cursor-pointer accent-[#FF3B30]" />
+                      <input type="range" min="3" max="15" defaultValue={projectTeam.length} className="w-full h-2 bg-white/10 rounded-lg appearance-none cursor-pointer accent-[#FF3B30]" />
                       <div className="flex justify-between text-[10px] text-[#8E8E93] mt-1">
                         <span>3</span>
                         <span>15</span>
