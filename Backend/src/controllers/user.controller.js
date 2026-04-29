@@ -14,12 +14,12 @@ async function getUsersController(req, res) {
   }
 }
 
-const getDevelopers = async (req, res) => {
+async function getDevelopers(req, res) {
   try {
     const developers = await prisma.user.findMany({
       where: {
         role: "DEVELOPER",
-        isActive: true,
+        deletedAt: null,
       },
       select: {
         id: true,
@@ -27,18 +27,23 @@ const getDevelopers = async (req, res) => {
         email: true,
         role: true,
         avatarUrl: true,
+        status: true,
       },
       orderBy: {
         fullName: "asc",
       },
     });
 
-    res.json({ developers });
+    return res.status(200).json({ developers });
   } catch (error) {
-    console.error(error);
-    res.status(500).json({ message: "Error al obtener developers" });
+    console.error("ERROR GET DEVELOPERS:", error);
+
+    return res.status(500).json({
+      message: "Error al obtener developers",
+      error: error.message,
+    });
   }
-};
+}
 const addProjectMember = async (req, res) => {
   try {
     const { projectId } = req.params;
