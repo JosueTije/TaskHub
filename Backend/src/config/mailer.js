@@ -1,36 +1,19 @@
-const nodemailer = require("nodemailer");
+const { Resend } = require("resend");
 
-const transporter = nodemailer.createTransport({
-  host: process.env.SMTP_HOST,
-  port: Number(process.env.SMTP_PORT),
-  secure: false,
-  auth: {
-    user: process.env.SMTP_USER,
-    pass: process.env.SMTP_PASS,
-  },
-});
+const resend = new Resend(process.env.RESEND_API_KEY);
 
 async function sendOtpEmail({ to, fullName, otp }) {
-  await transporter.sendMail({
-    from: process.env.MAIL_FROM,
+  await resend.emails.send({
+    from: process.env.MAIL_FROM || "TaskHub <onboarding@resend.dev>",
     to,
-    subject: "TaskHub - Código OTP de acceso",
+    subject: "Código de verificación TaskHub",
     html: `
-      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-        <h2>Bienvenido a TaskHub</h2>
-        <p>Hola ${fullName},</p>
-        <p>Tu cuenta ha sido creadaaa! Bienvenidooooo!! mucho éxito!!</p>
-        <p>Debes iniciar sesión con tu correo y la contraseña temporal que te dio el administrador, y posteriormente cambiarla!!.</p>
-        <p>Después, ingresa este código OTP:</p>
-        <div style="font-size: 32px; font-weight: bold; letter-spacing: 8px; margin: 24px 0;">
-          ${otp}
-        </div>
-        <p>Este código vence en 10 minutos.</p>
-      </div>
+      <h2>Hola ${fullName}</h2>
+      <p>Tu código de verificación es:</p>
+      <h1>${otp}</h1>
+      <p>Este código vence en 10 minutos.</p>
     `,
   });
 }
 
-module.exports = {
-  sendOtpEmail,
-};
+module.exports = { sendOtpEmail };
