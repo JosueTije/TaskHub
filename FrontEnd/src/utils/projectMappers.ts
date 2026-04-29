@@ -9,6 +9,8 @@ export const mapBackendSprintToUi = (sprint: any) => ({
       ? "Upcoming"
       : sprint.status === "ACTIVE"
       ? "Active"
+      : sprint.status === "CANCELLED"
+      ? "Cancelled"
       : "Completed",
 
   duration: `${new Date(sprint.startDate).toLocaleDateString()} - ${new Date(
@@ -17,6 +19,7 @@ export const mapBackendSprintToUi = (sprint: any) => ({
 
   startDate: sprint.startDate,
   endDate: sprint.endDate,
+  completedAt: sprint.completedAt || null,
   capacity: sprint.capacity,
 });
 
@@ -52,10 +55,10 @@ export const mapBackendTicketToUi = (ticket: any) => ({
   assignee: ticket.assignedTo?.fullName || "Sin asignar",
   assignedToId: ticket.assignedToId || null,
 
-  estimation: ticket.storyPoints || 0,
-  storyPoints: ticket.storyPoints || 0,
-  estimatedHours: ticket.estimatedHours || 0,
-  actualHours: ticket.actualHours || 0,
+  estimation: ticket.storyPoints ?? 0,
+  storyPoints: ticket.storyPoints ?? 0,
+  estimatedHours: ticket.estimatedHours ?? null,
+  actualHours: ticket.actualHours ?? null,
 
   sprintId: ticket.sprintId,
   parentTicketId: ticket.parentTicketId || null,

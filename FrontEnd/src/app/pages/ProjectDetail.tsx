@@ -395,7 +395,8 @@ tickets: realTickets.map(mapBackendTicketToUi),
       );
 
       const filteredDevelopers = (data.developers || []).filter(
-        (developer: any) => !projectMemberIds.has(developer.id)
+        (developer: any) =>
+          developer.role === 'DEVELOPER' && !projectMemberIds.has(developer.id)
       );
 
       setAvailableDevelopers(filteredDevelopers);
@@ -410,7 +411,7 @@ tickets: realTickets.map(mapBackendTicketToUi),
 }, [showAddDeveloperModal, project?.members]);
   const [showCloseProjectModal, setShowCloseProjectModal] = useState(false);
   const [showCompleteSprintModal, setShowCompleteSprintModal] = useState(false);
-  const [selectedTicket, setSelectedTicket] = useState<Ticket | null>(null);
+  const [selectedTicket, setSelectedTicket] = useState<any | null>(null);
   const [gamificationView, setGamificationView] = useState<'project' | 'all'>('project');
   const [progressData, setProgressData] = useState({
     percentage: '',
@@ -465,27 +466,58 @@ const [ticketData, setTicketData] = useState({
     priority: 'Medium',
     description: ''
   }]);
-  const activeSprint = project.sprints.find(s => s.status === 'Active');
-  const [sprintFilter, setSprintFilter] = useState<string | 'all'>(activeSprint?.id || 'all');
+  const activeSprint = project.sprints.find((s) => s.status === 'Active');
+  const [sprintFilter, setSprintFilter] = useState<string>(activeSprint?.id || 'active');
+
+  const generalSprintFilters = ['active', 'history', 'upcoming', 'all'];
+  const selectedSprintFromFilter = project.sprints.find((s) => s.id === sprintFilter);
+  const canCreateTicketInCurrentFilter = !generalSprintFilters.includes(sprintFilter);
+
+  const assignableDevelopers = (backendProject?.members || [])
+    .filter((member: any) => member.role === 'DEVELOPER')
+    .map((member: any) => ({
+      id: member.id,
+      name: member.fullName,
+      role: member.role,
+      email: member.email,
+      avatar: member.avatarUrl,
+      tasksAssigned:
+        dashboard?.teamMetrics?.find((metric: any) => metric.id === member.id)?.tasksAssigned ?? 0,
+    }));
+
+  const selectedAssigneeName =
+    assignableDevelopers.find((developer: any) => developer.id === ticketData.assignee)?.name || '';
 
 useEffect(() => {
-  if (!realSprints.length) return;
+  if (!realSprints.length) {
+    setRealTickets([]);
+    return;
+  }
 
   const loadTickets = async () => {
     try {
-      if (sprintFilter === "all") {
-        const responses = await Promise.all(
-          realSprints.map((sprint) =>
-            authFetch(`/tickets/sprint/${sprint.id}`)
-          )
-        );
+      const rawSprints =
+        sprintFilter === 'active'
+          ? realSprints.filter((sprint) => sprint.status === 'ACTIVE')
+          : sprintFilter === 'history'
+          ? realSprints.filter((sprint) => sprint.status === 'COMPLETED')
+          : sprintFilter === 'upcoming'
+          ? realSprints.filter((sprint) => sprint.status === 'PLANNING')
+          : sprintFilter === 'all'
+          ? realSprints
+          : realSprints.filter((sprint) => sprint.id === sprintFilter);
 
-        const allTickets = responses.flatMap((res) => res.tickets || []);
-        setRealTickets(allTickets);
-      } else {
-        const data = await authFetch(`/tickets/sprint/${sprintFilter}`);
-        setRealTickets(data.tickets || []);
+      if (!rawSprints.length) {
+        setRealTickets([]);
+        return;
       }
+
+      const responses = await Promise.all(
+        rawSprints.map((sprint) => authFetch(`/tickets/sprint/${sprint.id}`))
+      );
+
+      const allTickets = responses.flatMap((res) => res.tickets || []);
+      setRealTickets(allTickets);
     } catch (error) {
       console.error(error);
     }
@@ -606,7 +638,13 @@ const handleCreateSprint = async () => {
 };
 const handleCreateTicket = async () => {
   try {
+    if (ticketData.startDate && ticketData.dueDate && new Date(ticketData.dueDate) < new Date(ticketData.startDate)) {
+      alert('La fecha límite no puede ser anterior a la fecha de inicio.');
+      return;
+    }
+
     const priorityMap: any = {
+      Critical: "CRITICAL",
       High: "HIGH",
       Medium: "MEDIUM",
       Low: "LOW",
@@ -618,6 +656,7 @@ const handleCreateTicket = async () => {
       Review: "IN_REVIEW",
       Blocked: "BLOCKED",
       Done: "DONE",
+      Cancelled: "CANCELLED",
     };
 
     const response = await authFetch(`/tickets/sprint/${ticketData.sprintId}`, {
@@ -628,9 +667,7 @@ body: JSON.stringify({
   priority: priorityMap[ticketData.priority] || "MEDIUM",
   status: statusMap[ticketData.status] || "TODO",
   storyPoints: Number(ticketData.estimation),
-  estimatedHours: ticketData.estimatedHours
-    ? Number(ticketData.estimatedHours)
-    : Number(ticketData.estimation),
+  estimatedHours: Number(ticketData.estimatedHours),
   assignedToId: ticketData.assignee || null,
   startDate: ticketData.startDate || null,
   dueDate: ticketData.dueDate || null,
@@ -755,27 +792,61 @@ const handleAddDeveloper = async () => {
     alert(error.message || "No se pudo agregar el developer");
   }
 };
-const handleCompleteSprint = async () => {
+const handleStartSprint = async (sprintId: string) => {
   try {
-    await authFetch(`/sprints/${sprintFilter}/status`, {
-      method: "PATCH",
+    if (!sprintId || generalSprintFilters.includes(sprintId)) {
+      alert('Selecciona un sprint específico para iniciarlo.');
+      return;
+    }
+
+    await authFetch(`/sprints/${sprintId}/status`, {
+      method: 'PATCH',
       body: JSON.stringify({
-        status: "COMPLETED"
-      })
+        status: 'ACTIVE',
+      }),
     });
 
     const data = await authFetch(`/sprints/project/${id}`);
-    setRealSprints(data.sprints);
+    setRealSprints(data.sprints || []);
+
+    await loadDashboard();
+    setSprintFilter(sprintId);
+  } catch (error: any) {
+    alert(error.message || 'No se pudo iniciar el sprint');
+  }
+};
+
+const handleCompleteSprint = async () => {
+  try {
+    if (generalSprintFilters.includes(sprintFilter)) {
+      alert('Selecciona un sprint específico para concluirlo.');
+      return;
+    }
+
+    await authFetch(`/sprints/${sprintFilter}/status`, {
+      method: 'PATCH',
+      body: JSON.stringify({
+        status: 'COMPLETED',
+      }),
+    });
+
+    const data = await authFetch(`/sprints/project/${id}`);
+    setRealSprints(data.sprints || []);
     await loadDashboard();
 
     setShowCompleteSprintModal(false);
 
-  } catch (error:any) {
-    alert(error.message);
+    const nextActiveSprint = (data.sprints || []).find(
+      (sprint: any) => sprint.status === 'ACTIVE'
+    );
+
+    setSprintFilter(nextActiveSprint?.id || 'active');
+  } catch (error: any) {
+    alert(error.message || 'No se pudo concluir el sprint');
   }
 };
   const userTickets = realTickets.map(mapBackendTicketToUi);
-  const sprintFilteredTickets = sprintFilter === 'all' ? userTickets : userTickets.filter(t => t.sprintId === sprintFilter);
+  const sprintFilteredTickets = userTickets;
   const finalFilteredTickets = role === 'DEVELOPER' && showMyTicketsOnly ? sprintFilteredTickets.filter(t => t.assignee === user.name || t.assignee.includes(user.name)) : sprintFilteredTickets;
   const backlogTickets = finalFilteredTickets;
   const sprintTickets = finalFilteredTickets;
@@ -799,6 +870,7 @@ const handleCompleteSprint = async () => {
 const handleTicketUpdate = async (ticketId: string, updates: any) => {
   try {
     const priorityMap: any = {
+      Critical: "CRITICAL",
       High: "HIGH",
       Medium: "MEDIUM",
       Low: "LOW",
@@ -807,22 +879,32 @@ const handleTicketUpdate = async (ticketId: string, updates: any) => {
     const statusMap: any = {
       Backlog: "TODO",
       "In Progress": "IN_PROGRESS",
+      Review: "IN_REVIEW",
       Done: "DONE",
       Blocked: "BLOCKED",
+      Cancelled: "CANCELLED",
     };
+
+    const isManager = role === "PM" || role === "ADMIN";
+
+    const updateBody: any = isManager
+      ? {
+          title: updates.title,
+          description: updates.description,
+          priority: priorityMap[updates.priority],
+          storyPoints: updates.estimation,
+          startDate: updates.startDate,
+          dueDate: updates.dueDate,
+          actualHours: updates.actualHours,
+          estimatedHours: updates.estimatedHours,
+        }
+      : {
+          actualHours: updates.actualHours,
+        };
 
     await authFetch(`/tickets/${ticketId}`, {
       method: "PUT",
-      body: JSON.stringify({
-        title: updates.title,
-        description: updates.description,
-        priority: priorityMap[updates.priority],
-        storyPoints: updates.estimation,
-        startDate: updates.startDate,
-dueDate: updates.dueDate,
-actualHours: updates.actualHours,
-estimatedHours: updates.estimatedHours ?? updates.estimation,
-      }),
+      body: JSON.stringify(updateBody),
     });
 
     const statusResponse = await authFetch(`/tickets/${ticketId}/status`, {
@@ -845,7 +927,8 @@ estimatedHours: updates.estimatedHours ?? updates.estimation,
     alert(error.message || "No se pudo actualizar el ticket");
   }
 };
-  const priorityColors = {
+  const priorityColors: any = {
+    Critical: 'bg-[#FF3B30]/20 text-[#FF3B30] border-[#FF3B30]/30',
     High: 'bg-[#FF3B30]/10 text-[#FF3B30] border-[#FF3B30]/20',
     Medium: 'bg-yellow-500/10 text-yellow-500 border-yellow-500/20',
     Low: 'bg-blue-500/10 text-blue-500 border-blue-500/20'
@@ -932,8 +1015,11 @@ if (projectLoadError && !backendProject) {
             </div>
             <div className="flex items-center gap-3">
               <select value={sprintFilter} onChange={e => setSprintFilter(e.target.value)} className="bg-[#1C1C1E] border border-white/10 rounded-xl px-4 py-3 text-white text-sm focus:outline-none focus:ring-2 focus:ring-[#FF3B30] min-w-[250px]">
-                <option value="all">📊 Todos los Sprints (Vista Histórica)</option>
-                {realSprints.map(sprint => <option key={sprint.id} value={sprint.id}>
+                <option value="active">🏃 Sprints Activos</option>
+                <option value="history">✅ Historial / Sprints Cerrados</option>
+                <option value="upcoming">📅 Próximos Sprints</option>
+                <option value="all">📊 Todos los Sprints</option>
+                {project.sprints.map(sprint => <option key={sprint.id} value={sprint.id}>
                     {sprint.status === 'Active' && '🏃 '}
                     {sprint.status === 'Completed' && '✅ '}
                     {sprint.status === 'Upcoming' && '📅 '}
@@ -1427,15 +1513,36 @@ if (projectLoadError && !backendProject) {
                 <Info className="w-5 h-5 text-[#007AFF] flex-shrink-0 mt-0.5" />
                 <div className="flex-1">
                   <p className="text-sm text-white font-medium mb-1">
-                    {sprintFilter === 'all' ? `📊 Vista Histórica: ${backlogTickets.length} tickets en total` : `🏃 ${project.sprints.find(s => s.id === sprintFilter)?.name || 'Sprint'}: ${backlogTickets.length} tickets`}
+                    {sprintFilter === 'active'
+                      ? `🏃 Sprints activos: ${backlogTickets.length} tickets visibles`
+                      : sprintFilter === 'history'
+                      ? `✅ Historial: ${backlogTickets.length} tickets de sprints cerrados`
+                      : sprintFilter === 'upcoming'
+                      ? `📅 Próximos sprints: ${backlogTickets.length} tickets planeados`
+                      : sprintFilter === 'all'
+                      ? `📊 Todos los sprints: ${backlogTickets.length} tickets en total`
+                      : `${selectedSprintFromFilter?.status === 'Completed' ? '✅' : selectedSprintFromFilter?.status === 'Upcoming' ? '📅' : '🏃'} ${selectedSprintFromFilter?.name || 'Sprint'}: ${backlogTickets.length} tickets`}
                   </p>
                   <p className="text-xs text-[#8E8E93]">
-                    {sprintFilter === 'all' ? 'Mostrando todos los tickets del proyecto' : `Tickets del sprint: ${project.sprints.find(s => s.id === sprintFilter)?.duration || ''}`}
+                    {sprintFilter === 'active'
+                      ? 'Mostrando únicamente tickets de sprints activos. Los sprints cerrados quedan ocultos por defecto.'
+                      : sprintFilter === 'history'
+                      ? 'Mostrando tickets históricos de sprints concluidos.'
+                      : sprintFilter === 'upcoming'
+                      ? 'Mostrando tickets de sprints planeados.'
+                      : sprintFilter === 'all'
+                      ? 'Mostrando todos los tickets del proyecto, incluyendo activos, próximos y cerrados.'
+                      : `Tickets del sprint: ${selectedSprintFromFilter?.duration || 'Sin rango de fechas'}`}
                   </p>
                 </div>
                 
                 {}
-                {canManageProject && sprintFilter !== 'all' && project.sprints.find(s => s.id === sprintFilter)?.status === 'Active' && <button onClick={() => setShowCompleteSprintModal(true)} className="px-4 py-2 bg-green-500 hover:bg-green-600 rounded-lg text-white text-sm font-medium transition-all flex items-center gap-2 flex-shrink-0">
+                {canManageProject && !generalSprintFilters.includes(sprintFilter) && selectedSprintFromFilter?.status === 'Upcoming' && <button onClick={() => handleStartSprint(sprintFilter)} className="px-4 py-2 bg-blue-500 hover:bg-blue-600 rounded-lg text-white text-sm font-medium transition-all flex items-center gap-2 flex-shrink-0">
+                    <PlayCircle className="w-4 h-4" />
+                    Iniciar Sprint
+                  </button>}
+
+                {canManageProject && !generalSprintFilters.includes(sprintFilter) && selectedSprintFromFilter?.status === 'Active' && <button onClick={() => setShowCompleteSprintModal(true)} className="px-4 py-2 bg-green-500 hover:bg-green-600 rounded-lg text-white text-sm font-medium transition-all flex items-center gap-2 flex-shrink-0">
                     <CheckCircle2 className="w-4 h-4" />
                     Concluir Sprint
                   </button>}
@@ -1448,7 +1555,15 @@ if (projectLoadError && !backendProject) {
                 <div className="flex items-center justify-between p-6 border-b border-white/10">
                   <div className="flex items-center gap-2">
                     <h3 className="font-semibold text-white">
-                      {sprintFilter === 'all' ? 'Todos los Tickets' : `Tickets - ${project.sprints.find(s => s.id === sprintFilter)?.name || 'Sprint'}`}
+                      {sprintFilter === 'active'
+                        ? 'Tickets - Sprints Activos'
+                        : sprintFilter === 'history'
+                        ? 'Tickets - Historial / Sprints Cerrados'
+                        : sprintFilter === 'upcoming'
+                        ? 'Tickets - Próximos Sprints'
+                        : sprintFilter === 'all'
+                        ? 'Todos los Tickets'
+                        : `Tickets - ${selectedSprintFromFilter?.name || 'Sprint'}`}
                     </h3>
                     <Badge>{parentTicketsOnly.length} tickets</Badge>
                     {backlogTickets.length !== parentTicketsOnly.length && <span className="text-xs text-[#8E8E93]">({backlogTickets.length} total con subtickets)</span>}
@@ -1473,9 +1588,18 @@ if (projectLoadError && !backendProject) {
                       </button>}
                     
                     {canManageProject && <Button variant="outline" icon={Plus} onClick={() => {
+                    const sprintIdForNewTicket = canCreateTicketInCurrentFilter
+                      ? sprintFilter
+                      : activeSprint?.id || '';
+
+                    if (!sprintIdForNewTicket) {
+                      alert('Primero inicia o selecciona un sprint específico para crear tickets.');
+                      return;
+                    }
+
                     setTicketData({
                       ...ticketData,
-                      sprintId: sprintFilter !== 'all' ? sprintFilter : activeSprint?.id || ''
+                      sprintId: sprintIdForNewTicket
                     });
                     setShowTicketModal(true);
                   }} className="text-xs py-1 px-3">
@@ -1597,12 +1721,41 @@ if (projectLoadError && !backendProject) {
                           <ListTodo className="w-8 h-8 text-[#FF3B30]" />
                         </div>
                         <h4 className="text-base font-semibold text-white mb-2">
-                          {sprintFilter === 'all' ? 'No hay tickets en el proyecto' : 'Sprint vacío'}
+                          {sprintFilter === 'active'
+                            ? 'No hay tickets en sprints activos'
+                            : sprintFilter === 'history'
+                            ? 'No hay tickets históricos'
+                            : sprintFilter === 'upcoming'
+                            ? 'No hay tickets planeados'
+                            : sprintFilter === 'all'
+                            ? 'No hay tickets en el proyecto'
+                            : 'Sprint vacío'}
                         </h4>
                         <p className="text-sm text-[#8E8E93] mb-4">
-                          {sprintFilter === 'all' ? 'Comienza creando el primer ticket para este proyecto' : 'Este sprint no tiene tickets asignados aún. Crea tickets para comenzar a llenar el backlog y el Gantt.'}
+                          {sprintFilter === 'history'
+                            ? 'Los tickets aparecerán aquí cuando concluyas sprints.'
+                            : sprintFilter === 'active'
+                            ? 'Inicia un sprint o crea tickets en un sprint activo para verlos aquí.'
+                            : sprintFilter === 'upcoming'
+                            ? 'Selecciona un sprint futuro específico para planear tickets.'
+                            : 'Este sprint no tiene tickets asignados aún. Crea tickets para comenzar a llenar el backlog y el Gantt.'}
                         </p>
-                        {canManageProject && <button onClick={() => setShowTicketModal(true)} className="inline-flex items-center gap-2 px-4 py-2 bg-[#FF3B30] hover:bg-[#FF3B30]/90 rounded-lg text-white text-sm font-medium transition-all">
+                        {canManageProject && sprintFilter !== 'history' && <button onClick={() => {
+                          const sprintIdForNewTicket = canCreateTicketInCurrentFilter
+                            ? sprintFilter
+                            : activeSprint?.id || '';
+
+                          if (!sprintIdForNewTicket) {
+                            alert('Primero inicia o selecciona un sprint específico para crear tickets.');
+                            return;
+                          }
+
+                          setTicketData({
+                            ...ticketData,
+                            sprintId: sprintIdForNewTicket,
+                          });
+                          setShowTicketModal(true);
+                        }} className="inline-flex items-center gap-2 px-4 py-2 bg-[#FF3B30] hover:bg-[#FF3B30]/90 rounded-lg text-white text-sm font-medium transition-all">
                             <Plus className="w-4 h-4" />
                             Crear Primer Ticket
                           </button>}
@@ -1668,7 +1821,7 @@ if (projectLoadError && !backendProject) {
               </div>
 
               {}
-              {sprintFilter !== 'all' && (() => {
+              {!generalSprintFilters.includes(sprintFilter) && (() => {
               const selectedSprint = project.sprints.find(s => s.id === sprintFilter);
               if (!selectedSprint) return null;
               return <div className="bg-[#1C1C1E] border border-white/10 rounded-xl p-6 backdrop-blur-xl lg:col-span-2">
@@ -1909,7 +2062,7 @@ if (projectLoadError && !backendProject) {
               <h2 className="text-xl font-semibold text-white flex items-center gap-2">
                 <BarChart3 className="w-5 h-5 text-[#FF3B30]" />
                 Diagrama de Gantt
-                {sprintFilter !== 'all' && <Badge className="ml-2">{project.sprints.find(s => s.id === sprintFilter)?.name}</Badge>}
+                {!generalSprintFilters.includes(sprintFilter) && <Badge className="ml-2">{selectedSprintFromFilter?.name}</Badge>}
               </h2>
               
               {}
@@ -2414,13 +2567,13 @@ if (projectLoadError && !backendProject) {
                 <div className="relative">
                   <button type="button" onClick={() => setShowAssigneeDropdown(!showAssigneeDropdown)} className="w-full px-4 py-3 bg-[#0F0F0F] border border-white/10 rounded-lg text-left text-white focus:border-[#FF3B30] focus:ring-1 focus:ring-[#FF3B30] outline-none transition-all flex items-center justify-between">
                     <span className={ticketData.assignee ? 'text-white' : 'text-[#8E8E93]'}>
-                      {ticketData.assignee || 'Seleccionar desarrollador'}
+                      {selectedAssigneeName || 'Seleccionar desarrollador'}
                     </span>
                     <ChevronDown className="w-4 h-4 text-[#8E8E93]" />
                   </button>
                   
                   {showAssigneeDropdown && <div className="absolute z-10 w-full mt-2 bg-[#0F0F0F] border border-white/10 rounded-lg shadow-xl max-h-60 overflow-y-auto">
-                      {project.team.map(member => <button key={member.id} type="button" onClick={() => {
+                      {assignableDevelopers.map((member: any) => <button key={member.id} type="button" onClick={() => {
 setTicketData({
   ...ticketData,
   assignee: member.id
@@ -2440,6 +2593,11 @@ setTicketData({
                             {member.tasksAssigned} tareas
                           </div>
                         </button>)}
+                      {assignableDevelopers.length === 0 && (
+                        <div className="px-4 py-3 text-sm text-[#8E8E93]">
+                          No hay developers disponibles en este proyecto.
+                        </div>
+                      )}
                     </div>}
                 </div>
               </div>
@@ -2455,6 +2613,39 @@ setTicketData({
             })} className="w-full px-4 py-3 bg-[#0F0F0F] border border-white/10 rounded-lg text-white placeholder-[#8E8E93] focus:border-[#FF3B30] focus:ring-1 focus:ring-[#FF3B30] outline-none transition-all" />
               </div>
               
+              {}
+              <div>
+                <label className="block text-sm font-medium text-white mb-2">
+                  Horas estimadas
+                </label>
+                <input type="number" placeholder="Ej: 8" min="0" step="0.5" value={ticketData.estimatedHours} onChange={e => setTicketData({
+              ...ticketData,
+              estimatedHours: e.target.value
+            })} className="w-full px-4 py-3 bg-[#0F0F0F] border border-white/10 rounded-lg text-white placeholder-[#8E8E93] focus:border-[#FF3B30] focus:ring-1 focus:ring-[#FF3B30] outline-none transition-all" />
+              </div>
+
+              {}
+              <div>
+                <label className="block text-sm font-medium text-white mb-2">
+                  Fecha de inicio
+                </label>
+                <input type="date" value={ticketData.startDate} onChange={e => setTicketData({
+              ...ticketData,
+              startDate: e.target.value
+            })} className="w-full px-4 py-3 bg-[#0F0F0F] border border-white/10 rounded-lg text-white focus:border-[#FF3B30] focus:ring-1 focus:ring-[#FF3B30] outline-none transition-all" />
+              </div>
+
+              {}
+              <div>
+                <label className="block text-sm font-medium text-white mb-2">
+                  Fecha límite
+                </label>
+                <input type="date" value={ticketData.dueDate} min={ticketData.startDate || undefined} onChange={e => setTicketData({
+              ...ticketData,
+              dueDate: e.target.value
+            })} className="w-full px-4 py-3 bg-[#0F0F0F] border border-white/10 rounded-lg text-white focus:border-[#FF3B30] focus:ring-1 focus:ring-[#FF3B30] outline-none transition-all" />
+              </div>
+
               {}
               <div>
                 <label className="block text-sm font-medium text-white mb-2">
@@ -2481,6 +2672,9 @@ setTicketData({
             })} className="w-full px-4 py-3 bg-[#0F0F0F] border border-white/10 rounded-lg text-white focus:border-[#FF3B30] focus:ring-1 focus:ring-[#FF3B30] outline-none transition-all">
                   <option value="Backlog">📋 Backlog</option>
                   <option value="In Progress">⚡ In Progress</option>
+                  <option value="Review">🔎 Review</option>
+                  <option value="Blocked">🚫 Bloqueado</option>
+                  <option value="Done">✅ Done</option>
                 </select>
               </div>
 
@@ -2494,7 +2688,7 @@ setTicketData({
               sprintId: e.target.value
             })} className="w-full px-4 py-3 bg-[#0F0F0F] border border-white/10 rounded-lg text-white focus:border-[#FF3B30] focus:ring-1 focus:ring-[#FF3B30] outline-none transition-all">
                   <option value="">Seleccionar sprint</option>
-                  {project.sprints.map(sprint => <option key={sprint.id} value={sprint.id}>
+                  {project.sprints.filter(sprint => sprint.status !== 'Completed').map(sprint => <option key={sprint.id} value={sprint.id}>
                       {sprint.status === 'Active' && '🏃 '}
                       {sprint.status === 'Completed' && '✅ '}
                       {sprint.status === 'Upcoming' && '📅 '}
@@ -2516,6 +2710,9 @@ setTicketData({
   !ticketData.title.trim() ||
   !ticketData.assignee ||
   !ticketData.estimation ||
+  !ticketData.estimatedHours ||
+  !ticketData.startDate ||
+  !ticketData.dueDate ||
   !ticketData.sprintId
 }>
                 Crear Ticket
@@ -3562,7 +3759,7 @@ setTicketData({
                 <p className="text-sm text-[#8E8E93]">
                   ¿Estás seguro que deseas concluir el sprint{' '}
                   <span className="text-white font-medium">
-                    "{project.sprints.find(s => s.id === sprintFilter)?.name}"
+                    "{selectedSprintFromFilter?.name || 'Sprint seleccionado'}"
                   </span>?
                 </p>
               </div>
