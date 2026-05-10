@@ -1,5 +1,5 @@
-import dotenv from "dotenv";
-dotenv.config();
+require("dotenv").config();
+
 
 const app = require("./app");
 

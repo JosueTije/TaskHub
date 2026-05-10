@@ -11,6 +11,7 @@ const projectRoutes = require("./routes/project.routes");
 const sprintRoutes = require("./routes/sprint.routes");
 const ticketRoutes = require("./routes/ticket.routes");
 const analyticsRoutes = require("./routes/analytics.routes");
+const chatRoutes = require("./routes/chat.routes");
 
 dotenv.config();
 
@@ -36,12 +37,13 @@ app.get("/", (req, res) => {
 
 // rutasssss!!
 
-app.use("/auth", authRoutes);
-app.use("/admin", adminRoutes);
-app.use("/users", userRoutes);
-app.use("/projects", projectRoutes);
-app.use("/sprints", sprintRoutes);
-app.use("/tickets", ticketRoutes);
-app.use("/analytics", analyticsRoutes);
+// app.use("/auth", authRoutes);
+// app.use("/admin", adminRoutes);
+// app.use("/users", userRoutes);
+// app.use("/projects", projectRoutes);
+// app.use("/sprints", sprintRoutes);
+// app.use("/tickets", ticketRoutes);
+// app.use("/analytics", analyticsRoutes);
+app.use("/chat", chatRoutes);
 
 module.exports = app;
