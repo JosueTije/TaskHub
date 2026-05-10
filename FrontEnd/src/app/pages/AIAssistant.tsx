@@ -187,6 +187,7 @@ export function AIAssistant() {
         },
         body: JSON.stringify({
           message: currentMessage,
+          history: messages,
         }),
       });
 

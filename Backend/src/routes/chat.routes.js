@@ -10,7 +10,7 @@ const ai = new GoogleGenAI({
 
 router.post("/", async (req, res) => {
     try {
-        const { message } = req.body;
+        const { message, history } = req.body;
 
         const projects = await prisma.project.findMany({
             take: 5,
@@ -27,6 +27,12 @@ router.post("/", async (req, res) => {
                 sprint => sprint.status === "DONE"
             ).length,
         }));
+
+        console.log("PROJECTS:", projects);
+
+        const formattedHistory = history
+            ?.map(msg => `${msg.type}: ${msg.content}`)
+            .join("\n");
 
         const prompt = `
         Eres Tally, un asistente experto en project management y productividad de la plataforma TaskHub.
@@ -45,10 +51,16 @@ router.post("/", async (req, res) => {
         - identifica riesgos importantes
         - menciona proyectos atrasados
         - da recomendaciones accionables
+        - NO te presentes otra vez si ya estás en una conversación
+        - responde directamente a la pregunta
+        - evita repetir saludos
+
+        Historial de conversación: 
+        ${formattedHistory}
 
     Estos son los proyectos actuales:
 
-    ${JSON.stringify(projects, null, 2)}
+    ${JSON.stringify(summarizedProjects, null, 2)}
 
     Pregunta del usuario:
     ${message}
@@ -62,9 +74,12 @@ router.post("/", async (req, res) => {
             contents: prompt,
         });
 
+        console.log(JSON.stringify(response, null, 2));
+
         console.log("RESPUESTA COMPLETA:", response);
 
-        const text = response.text;
+        const text = response.candidates?.[0]?.content?.parts?.[0]?.text || "No response from Gemini";
+
 
         console.log("TEXT:", text);
 
