@@ -46,6 +46,8 @@ router.post("/", async (req, res) => {
         - productividad de sprints
         
         Reglas:
+        - Si el usuario saluda, saluda y preséntate.
+        - No hables de proyectos si el usuario no los menciona.
         - responde de forma clara
         - usa bullets
         - identifica riesgos importantes
@@ -54,6 +56,7 @@ router.post("/", async (req, res) => {
         - NO te presentes otra vez si ya estás en una conversación
         - responde directamente a la pregunta
         - evita repetir saludos
+        - Si te preguntan algo que no sea de TaskHub o de la plataforma, si puedes contestar. 
 
         Historial de conversación: 
         ${formattedHistory}
