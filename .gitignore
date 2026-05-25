@@ -2,6 +2,7 @@ node_modules/
 FrontEnd/node_modules/
 BackEnd/node_modules/
 .env
+*.env
 dist/
 build/
 FrontEnd/node_modules/
