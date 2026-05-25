@@ -1,5 +1,6 @@
 const express = require("express");
 const router = express.Router();
+
 const prisma = require("../config/prisma");
 
 const { GoogleGenAI } = require("@google/genai");
@@ -7,41 +8,64 @@ const { GoogleGenAI } = require("@google/genai");
 const puppeteer = require("puppeteer");
 const { marked } = require("marked");
 
+// ===============================
+// GEMINI CONFIG
+// ===============================
+
 const ai = new GoogleGenAI({
     apiKey: process.env.GEMINI_API_KEY,
 });
 
+// ===============================
+// CHAT ENDPOINT
+// ===============================
+
 router.post("/", async (req, res) => {
+
     try {
-        const { message, history } = req.body;
+
+        const { message, history, reportData } = req.body;
 
         let projects = [];
 
-        try { 
+        // ===== DATABASE =====
+
+        try {
+
             projects = await prisma.project.findMany({
-            take: 5,
-            include: {
-                sprints: true,
-                tickets: true,
-            },
-        });
-    } catch (error) {
-        console.error("Error fetching projects:", error);
-    }
+                take: 5,
+
+                include: {
+                    sprints: true,
+                    tickets: true,
+                },
+            });
+
+        } catch (dbError) {
+
+            console.error("DATABASE ERROR:", dbError);
+
+        }
+
+        // ===== PROJECT SUMMARY =====
 
         const summarizedProjects = projects.map(project => ({
             name: project.name,
+
             sprintCount: project.sprints.length,
+
             completedSprints: project.sprints.filter(
                 sprint => sprint.status === "DONE"
             ).length,
         }));
 
-        console.log("PROJECTS:", projects);
+        // ===== CHAT HISTORY =====
 
-        const formattedHistory = history
-            ?.map(msg => `${msg.type}: ${msg.content}`)
+        const formattedHistory = (history || [])
+            .map(msg => `${msg.type}: ${msg.content}`)
             .join("\n");
+
+        // ===== PROMPT =====
 
         const prompt = `
         Eres Tally, un asistente experto en project management y productividad de la plataforma TaskHub.
@@ -65,105 +89,16 @@ router.post("/", async (req, res) => {
         - NO te presentes otra vez si ya estás en una conversación
         - responde directamente a la pregunta
         - evita repetir saludos
-        - Si te preguntan algo que no sea de TaskHub o de la plataforma, si puedes contestar. 
+        - Si te preguntan algo que no sea de TaskHub o de la plataforma, si puedes contestar.
 
-        Historial de conversación: 
+        Historial de conversación:
         ${formattedHistory}
 
-    Estos son los proyectos actuales:
+        Estos son los proyectos actuales:
 
-    ${JSON.stringify(summarizedProjects, null, 2)}
+        ${JSON.stringify(reportData, null, 2)}
 
-    Pregunta del usuario:
-    ${message}
-    `;
-
-        console.log("MENSAJE:", message);
-        console.log("API KEY EXISTS:", !!process.env.GEMINI_API_KEY);
-
-        const response = await ai.models.generateContent({
-            model: "gemini-2.5-flash",
-            contents: prompt,
-        });
-
-        console.log(JSON.stringify(response, null, 2));
-
-        console.log("RESPUESTA COMPLETA:", response);
-
-        const text = response.candidates?.[0]?.content?.parts?.[0]?.text || "No response from Gemini";
-
-
-        console.log("TEXT:", text);
-
-        res.json({
-            reply: text,
-        });
-
-    } catch (error) {
-        console.error("ERROR GEMINI:", error);
-
-        res.status(500).json({
-            error: error.message,
-        });
-    }
-});
-
-router.post("/pdf", async (req, res) => {
-
-    try {
-
-        const { message, history } = req.body;
-
-        let projects = [];
-
-        try {
-
-            projects = await prisma.project.findMany({
-                take: 5,
-                include: {
-                    sprints: true,
-                    tickets: true,
-                },
-            });
-
-        } catch (error) {
-
-            console.error("DATABASE ERROR:", error);
-
-        }
-
-        const summarizedProjects = projects.map(project => ({
-            name: project.name,
-
-            sprintCount: project.sprints.length,
-
-            completedSprints: project.sprints.filter(
-                sprint => sprint.status === "DONE"
-            ).length,
-        }));
-
-        const formattedHistory = history
-            ?.map(msg => `${msg.type}: ${msg.content}`)
-            .join("\n");
-
-        const prompt = `
-        Eres Tally, un asistente experto en project management.
-
-        Genera un reporte ejecutivo profesional.
-
-        Usa:
-        - títulos
-        - bullets
-        - recomendaciones
-        - conclusiones
-
-        Historial:
-        ${formattedHistory}
-
-        Proyectos:
-        ${JSON.stringify(summarizedProjects, null, 2)}
-
-        Pregunta:
+        Pregunta del usuario:
         ${message}
         `;
 
@@ -174,13 +109,53 @@ router.post("/pdf", async (req, res) => {
             contents: prompt,
         });
 
+        // ===== RESPONSE TEXT =====
+
         const text =
             response.candidates?.[0]?.content?.parts?.[0]?.text
-            || "No response";
+            || "No response from Gemini";
+
+        console.log("AI RESPONSE:", text);
+
+        // ===== SEND RESPONSE =====
+
+        res.json({
+            reply: text,
+        });
+
+    } catch (error) {
+
+        console.error("ERROR GEMINI:", error);
+
+        res.status(500).json({
+            error: error.message,
+        });
+    }
+});
+
+// ===============================
+// PDF ENDPOINT
+// ===============================
+
+router.post("/pdf", async (req, res) => {
+
+    try {
+
+        const { reportContent } = req.body;
+
+        // ===== VALIDATION =====
+
+        if (!reportContent) {
+
+            return res.status(400).json({
+                error: "reportContent is required",
+            });
+
+        }
 
         // ===== MARKDOWN -> HTML =====
 
-        const htmlContent = marked(text);
+        const htmlContent = marked(reportContent);
 
         // ===== PUPPETEER =====
 
@@ -190,100 +165,116 @@ router.post("/pdf", async (req, res) => {
 
         const page = await browser.newPage();
 
+        // ===== HTML TEMPLATE =====
+
         await page.setContent(`
 
             <html>
 
-            <head>
+                <head>
 
-                <style>
+                    <style>
 
-                    body {
-                        font-family: Arial;
-                        padding: 40px;
-                        background: #F9FAFB;
-                        color: #111827;
-                    }
+                        body {
+                            font-family: Arial, sans-serif;
+                            padding: 40px;
+                            background: #F9FAFB;
+                            color: #111827;
+                        }
 
-                    .header {
-                        display: flex;
-                        justify-content: space-between;
-                        align-items: center;
-                        margin-bottom: 40px;
-                    }
+                        .header {
+                            display: flex;
+                            justify-content: space-between;
+                            align-items: center;
+                            margin-bottom: 40px;
+                        }
 
-                    h1 {
-                        color: #5F0229;
-                        margin: 0;
-                    }
+                        h1 {
+                            color: #5F0229;
+                            margin: 0;
+                        }
 
-                    .subtitle {
-                        color: #6B7280;
-                    }
+                        .subtitle {
+                            color: #6B7280;
+                            margin-top: 5px;
+                        }
 
-                    .date {
-                        font-size: 14px;
-                        color: #6B7280;
-                    }
+                        .date {
+                            font-size: 14px;
+                            color: #6B7280;
+                        }
 
-                    .analysis-card {
-                        background: white;
-                        border-radius: 20px;
-                        padding: 30px;
-                        border: 1px solid #E5E7EB;
-                    }
+                        .analysis-card {
+                            background: white;
+                            border-radius: 20px;
+                            padding: 30px;
+                            border: 1px solid #E5E7EB;
+                        }
 
-                    ul {
-                        padding-left: 20px;
-                    }
+                        h1, h2, h3 {
+                            color: #5F0229;
+                        }
 
-                    li {
-                        margin-bottom: 10px;
-                    }
+                        p {
+                            line-height: 1.7;
+                        }
 
-                </style>
+                        ul {
+                            padding-left: 20px;
+                        }
 
-            </head>
+                        li {
+                            margin-bottom: 10px;
+                        }
 
-            <body>
+                    </style>
 
-                <div class="header">
+                </head>
 
-                    <div>
-                        <h1>TaskHub AI Report</h1>
+                <body>
 
-                        <p class="subtitle">
-                            Generado por Tally AI
-                        </p>
+                    <div class="header">
+
+                        <div>
+
+                            <h1>TaskHub AI Report</h1>
+
+                            <p class="subtitle">
+                                Generado por Tally AI
+                            </p>
+
+                        </div>
+
+                        <div class="date">
+                            ${new Date().toLocaleDateString()}
+                        </div>
+
                     </div>
 
-                    <div class="date">
-                        ${new Date().toLocaleDateString()}
+                    <div class="analysis-card">
+
+                        ${htmlContent}
+
                     </div>
 
-                </div>
-
-                <div class="analysis-card">
-
-                    ${htmlContent}
-
-                </div>
-
-            </body>
+                </body>
 
             </html>
 
         `);
+
+        // ===== GENERATE PDF =====
 
         const pdf = await page.pdf({
             format: "A4",
             printBackground: true,
         });
 
-        console.log("PDF GENERATED");
-        console.log(pdf.length);
+        // ===== CLOSE BROWSER =====
 
         await browser.close();
+
+        // ===== RESPONSE HEADERS =====
 
         res.set({
             "Content-Type": "application/pdf",
@@ -293,6 +284,8 @@ router.post("/pdf", async (req, res) => {
 
             "Content-Length": pdf.length,
         });
+
+        // ===== SEND PDF =====
 
         res.send(pdf);
 
@@ -306,5 +299,8 @@ router.post("/pdf", async (req, res) => {
     }
 });
 
+// ===============================
+// EXPORT
+// ===============================
 
 module.exports = router;
