@@ -1,0 +1,6 @@
+allowBuilds:
+  '@google/genai': false
+  '@prisma/engines': true
+  prisma: true
+  protobufjs: false
+  puppeteer: true

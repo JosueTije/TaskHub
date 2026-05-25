@@ -133,6 +133,54 @@ const initialMessages: Message[] = [{
 }];
 export function AIAssistant() {
   const [messages, setMessages] = useState<Message[]>(initialMessages);
+  const generatePDF = async () => {
+
+  try {
+
+    const response = await fetch(
+      "http://localhost:4000/chat/pdf",
+      {
+        method: "POST",
+
+        headers: {
+          "Content-Type": "application/json",
+        },
+
+        body: JSON.stringify({
+
+          message:
+            messages[messages.length - 1]?.content,
+
+          history: messages,
+
+        }),
+      }
+    );
+
+    const blob = await response.blob();
+
+    const url =
+      window.URL.createObjectURL(blob);
+
+    const a =
+      document.createElement("a");
+
+    a.href = url;
+
+    a.download = "taskhub-report.pdf";
+
+    document.body.appendChild(a);
+
+    a.click();
+
+    a.remove();
+
+  } catch (error) {
+
+    console.error("PDF ERROR:", error);
+
+  }
+};
   const [inputValue, setInputValue] = useState('');
   const [isTyping, setIsTyping] = useState(false);
   const [showSuggestions, setShowSuggestions] = useState(true);
@@ -289,7 +337,7 @@ export function AIAssistant() {
             }} whileTap={{
               scale: 0.95
             }}>
-              <Button variant="secondary" icon={Download} className="text-xs">
+              <Button variant="secondary" icon={Download} className="text-xs" onClick={generatePDF}>
                 Exportar PDF
               </Button>
             </motion.div>
