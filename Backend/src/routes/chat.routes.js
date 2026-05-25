@@ -12,13 +12,19 @@ router.post("/", async (req, res) => {
     try {
         const { message, history } = req.body;
 
-        const projects = await prisma.project.findMany({
+        let projects = [];
+
+        try { 
+            projects = await prisma.project.findMany({
             take: 5,
             include: {
                 sprints: true,
                 tickets: true,
             },
         });
+    } catch (error) {
+        console.error("Error fetching projects:", error);
+    }
 
         const summarizedProjects = projects.map(project => ({
             name: project.name,
