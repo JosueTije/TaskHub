@@ -7,6 +7,17 @@ const {
   deleteSprint,
 } = require("../services/sprint.service");
 
+function sprintErrorStatus(msg = "") {
+  if (msg.includes("Rol no autorizado") || msg.includes("No tienes permisos")) return 403;
+  if (
+    msg.includes("no existe") ||
+    msg.includes("no encontrado") ||
+    msg.includes("archivado") ||
+    msg.includes("no tienes acceso") // neutralized — returns 404 not 403
+  ) return 404;
+  return 400;
+}
+
 async function createSprintController(req, res) {
   try {
     const { projectId } = req.params;
@@ -28,7 +39,7 @@ async function createSprintController(req, res) {
       sprint,
     });
   } catch (error) {
-    return res.status(400).json({
+    return res.status(sprintErrorStatus(error.message)).json({
       message: error.message || "Error al crear sprint",
     });
   }
@@ -44,11 +55,9 @@ async function getSprintsByProjectController(req, res) {
       role: req.user.role,
     });
 
-    return res.status(200).json({
-      sprints,
-    });
+    return res.status(200).json({ sprints });
   } catch (error) {
-    return res.status(400).json({
+    return res.status(sprintErrorStatus(error.message)).json({
       message: error.message || "Error al obtener sprints",
     });
   }
@@ -64,11 +73,9 @@ async function getSprintByIdController(req, res) {
       role: req.user.role,
     });
 
-    return res.status(200).json({
-      sprint,
-    });
+    return res.status(200).json({ sprint });
   } catch (error) {
-    return res.status(404).json({
+    return res.status(sprintErrorStatus(error.message)).json({
       message: error.message || "Error al obtener sprint",
     });
   }
@@ -95,7 +102,7 @@ async function updateSprintController(req, res) {
       sprint,
     });
   } catch (error) {
-    return res.status(400).json({
+    return res.status(sprintErrorStatus(error.message)).json({
       message: error.message || "Error al actualizar sprint",
     });
   }
@@ -118,7 +125,7 @@ async function updateSprintStatusController(req, res) {
       sprint,
     });
   } catch (error) {
-    return res.status(400).json({
+    return res.status(sprintErrorStatus(error.message)).json({
       message: error.message || "Error al actualizar estado del sprint",
     });
   }
@@ -136,7 +143,7 @@ async function deleteSprintController(req, res) {
 
     return res.status(200).json(result);
   } catch (error) {
-    return res.status(400).json({
+    return res.status(sprintErrorStatus(error.message)).json({
       message: error.message || "Error al eliminar sprint",
     });
   }

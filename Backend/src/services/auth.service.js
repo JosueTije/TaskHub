@@ -8,8 +8,10 @@ const { compareOtp } = require("../utils/otp");
 const {
   signAccessToken,
   signOtpSessionToken,
+  signPasswordResetToken,
   verifyToken,
 } = require("../utils/jwt");
+const { sendPasswordResetEmail } = require("../config/mailer");
 
 async function login({ email, password }) {
   const user = await prisma.user.findUnique({
@@ -161,8 +163,103 @@ async function setNewPassword({ setupPasswordToken, newPassword }) {
   };
 }
 
+async function forgotPassword({ email }) {
+  const user = await prisma.user.findUnique({ where: { email } });
+
+  // Always respond the same way to prevent email enumeration
+  if (!user || user.status === "INACTIVE") return;
+
+  const resetToken = signPasswordResetToken({
+    sub: user.id,
+    email: user.email,
+    purpose: "PASSWORD_RESET",
+  });
+
+  const frontendUrl = process.env.FRONTEND_URL || "http://localhost:5173";
+  const resetLink = `${frontendUrl}/reset-password?token=${resetToken}`;
+
+  await sendPasswordResetEmail({
+    to: user.email,
+    fullName: user.fullName,
+    resetLink,
+  });
+}
+
+async function resetPasswordWithToken({ token, newPassword }) {
+  let payload;
+  try {
+    payload = verifyToken(token);
+  } catch {
+    throw new Error("El enlace de recuperación es inválido o expiró");
+  }
+
+  if (payload.purpose !== "PASSWORD_RESET") {
+    throw new Error("Token inválido");
+  }
+
+  if (!validatePasswordStrength(newPassword)) {
+    throw new Error(
+      "La contraseña debe tener mínimo 8 caracteres, mayúscula, minúscula, número y símbolo"
+    );
+  }
+
+  const user = await prisma.user.findUnique({ where: { id: payload.sub } });
+  if (!user) throw new Error("Usuario no encontrado");
+
+  const passwordHash = await hashPassword(newPassword);
+
+  await prisma.user.update({
+    where: { id: user.id },
+    data: { passwordHash, mustChangePassword: false, status: "ACTIVE" },
+  });
+
+  return { message: "Contraseña actualizada correctamente" };
+}
+
+async function resendOtp({ otpToken }) {
+  let payload;
+  try {
+    payload = verifyToken(otpToken);
+  } catch {
+    throw new Error("Token de sesión inválido o expirado");
+  }
+
+  if (payload.purpose !== "FIRST_ACCESS_OTP") {
+    throw new Error("Token inválido");
+  }
+
+  const user = await prisma.user.findUnique({ where: { id: payload.sub } });
+  if (!user || !user.mustChangePassword) {
+    throw new Error("No hay OTP pendiente para este usuario");
+  }
+
+  const { generateOtp, hashOtp, getOtpExpiration } = require("../utils/otp");
+  const otp = generateOtp();
+  const codeHash = await hashOtp(otp);
+  const expiresAt = getOtpExpiration(10);
+
+  await prisma.$transaction(async (tx) => {
+    await tx.userOtp.updateMany({
+      where: { userId: user.id, type: "ACCOUNT_SETUP", usedAt: null },
+      data: { usedAt: new Date() },
+    });
+    await tx.userOtp.create({
+      data: { userId: user.id, type: "ACCOUNT_SETUP", codeHash, expiresAt },
+    });
+  });
+
+  sendOtpEmail({ to: user.email, fullName: user.fullName, otp }).catch((err) => {
+    console.error("Error reenviando OTP:", err);
+  });
+
+  console.log("OTP reenviado para:", user.email);
+}
+
 module.exports = {
   login,
   verifyFirstAccessOtp,
   setNewPassword,
+  forgotPassword,
+  resetPasswordWithToken,
+  resendOtp,
 };

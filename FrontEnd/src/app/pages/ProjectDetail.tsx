@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useParams, Link, useNavigate } from 'react-router';
+import { toast } from 'sonner';
 import { Calendar, TrendingUp, TrendingDown, AlertTriangle, AlertCircle, Target, Users, Clock, CheckCircle2, XCircle, FileText, Zap, Trophy, Award, Plus, X, ArrowRight, Activity, BarChart3, MessageSquare, Settings, ChevronDown, ChevronUp, GripVertical, Shield, ListTodo, Bell, Sparkles, PlayCircle, Edit3, Link2, Info, Table, LayoutGrid, UserPlus, Star, Rocket, Flame, Code, GitBranch, Percent, RefreshCw, Archive, Lock } from 'lucide-react';
 import { Badge } from '../components/ui/badge';
 import { Button } from '../components/ui/button';
@@ -46,6 +47,7 @@ const [loadingDevelopers, setLoadingDevelopers] = useState(false);
 
 
 const [dashboard, setDashboard] = useState<any>(null);
+const [userRank, setUserRank] = useState<number | null>(null);
 
 const mapDashboardRiskToUi = (risk?: string) => {
   switch (risk) {
@@ -62,13 +64,11 @@ const mapDashboardRiskToUi = (risk?: string) => {
 
 const loadDashboard = async () => {
   if (!id) return;
-
   try {
-const data = await authFetch(`/analytics/project/${id}/dashboard`);
-console.log("DASHBOARD DATA:", data);
-setDashboard(data);
-  } catch (error) {
-    console.error(error);
+    const data = await authFetch(`/analytics/project/${id}/dashboard`);
+    setDashboard(data);
+  } catch (error: any) {
+    toast.error(error.message || 'Error al cargar métricas del proyecto');
   }
 };
 
@@ -85,9 +85,8 @@ useEffect(() => {
 
       const sprintRes = await authFetch(`/sprints/project/${id}`);
       setRealSprints(sprintRes.sprints || []);
-
-    } catch (error) {
-      console.error(error);
+    } catch (error: any) {
+      toast.error(error.message || 'Error al cargar sprints');
     } finally {
       setLoadingAgile(false);
     }
@@ -95,6 +94,16 @@ useEffect(() => {
 
   loadAgile();
 }, [id]);
+
+useEffect(() => {
+  if (role !== 'DEVELOPER' || !user?.id) return;
+  authFetch<{ developers: Array<{ id: string; position: number }> }>('/gamification/leaderboard')
+    .then((data) => {
+      const me = data.developers.find((d) => d.id === user.id);
+      setUserRank(me?.position ?? null);
+    })
+    .catch(() => {});
+}, [user?.id, role]);
 
 useEffect(() => {
   const loadProjects = async () => {
@@ -223,7 +232,7 @@ const projectBlockers = (project as any)?.blockers || [];
 
       setAvailableDevelopers(filteredDevelopers);
     } catch (error: any) {
-      alert(error.message || "No se pudieron cargar los developers");
+      toast.error(error.message || "No se pudieron cargar los developers");
     } finally {
       setLoadingDevelopers(false);
     }
@@ -233,6 +242,10 @@ const projectBlockers = (project as any)?.blockers || [];
 }, [showAddDeveloperModal, project?.members]);
   const [showCloseProjectModal, setShowCloseProjectModal] = useState(false);
   const [showCompleteSprintModal, setShowCompleteSprintModal] = useState(false);
+  const [showEditProjectModal, setShowEditProjectModal] = useState(false);
+  const [editProjectForm, setEditProjectForm] = useState({ name: '', description: '', pmId: '', riskLevel: '', startDate: '', targetEndDate: '', budget: '' });
+  const [isSavingProject, setIsSavingProject] = useState(false);
+  const [editProjectError, setEditProjectError] = useState('');
   const [selectedTicket, setSelectedTicket] = useState<any | null>(null);
   const [gamificationView, setGamificationView] = useState<'project' | 'all'>('project');
   const [progressData, setProgressData] = useState({
@@ -292,6 +305,12 @@ const activeSprint = projectSprints.find((s) => s.status === 'Active');
   const [sprintFilter, setSprintFilter] = useState<string>(activeSprint?.id || 'active');
 
   const generalSprintFilters = ['active', 'history', 'upcoming', 'all'];
+
+  useEffect(() => {
+    if (activeSprint && generalSprintFilters.includes(sprintFilter)) {
+      setSprintFilter(activeSprint.id);
+    }
+  }, [activeSprint?.id]);
 const selectedSprintFromFilter = projectSprints.find((s) => s.id === sprintFilter);
   const canCreateTicketInCurrentFilter = !generalSprintFilters.includes(sprintFilter);
 
@@ -340,8 +359,8 @@ useEffect(() => {
 
       const allTickets = responses.flatMap((res) => res.tickets || []);
       setRealTickets(allTickets);
-    } catch (error) {
-      console.error(error);
+    } catch (error: any) {
+      toast.error(error.message || 'Error al cargar tickets');
     }
   };
 
@@ -349,92 +368,43 @@ useEffect(() => {
 }, [sprintFilter, realSprints]);
   const [ticketsView, setTicketsView] = useState<'table' | 'kanban'>('table');
   const [showMyTicketsOnly, setShowMyTicketsOnly] = useState(false);
-  const sprintsGantt = [{
-    id: 1,
-    name: 'Sprint 1 - Foundation',
-    startWeek: 1,
-    plannedDuration: 2,
-    actualDuration: 2.5,
-    progress: 100,
-    status: 'completed',
-    completedTickets: 12,
-    totalTickets: 12,
-    capacity: 40,
-    used: 42,
-    risk: 'Low',
-    dependencies: [],
-    isCriticalPath: true
-  }, {
-    id: 2,
-    name: 'Sprint 2 - Core Features',
-    startWeek: 3.5,
-    plannedDuration: 2,
-    actualDuration: 2,
-    progress: 100,
-    status: 'completed',
-    completedTickets: 15,
-    totalTickets: 15,
-    capacity: 40,
-    used: 38,
-    risk: 'Low',
-    dependencies: [1],
-    isCriticalPath: true
-  }, {
-    id: 3,
-    name: 'Sprint 3 - Integration',
-    startWeek: 5.5,
-    plannedDuration: 2,
-    actualDuration: null,
-    progress: 75,
-    status: 'active',
-    completedTickets: 9,
-    totalTickets: 12,
-    capacity: 40,
-    used: 35,
-    risk: 'Medium',
-    dependencies: [2],
-    isCriticalPath: true
-  }, {
-    id: 4,
-    name: 'Sprint 4 - Polish & QA',
-    startWeek: 7.5,
-    plannedDuration: 2,
-    actualDuration: null,
-    progress: 0,
-    status: 'pending',
-    completedTickets: 0,
-    totalTickets: 10,
-    capacity: 40,
-    used: 0,
-    risk: 'Low',
-    dependencies: [3],
-    isCriticalPath: true
-  }, {
-    id: 5,
-    name: 'Sprint 5 - Release Prep',
-    startWeek: 9.5,
-    plannedDuration: 1.5,
-    actualDuration: null,
-    progress: 0,
-    status: 'pending',
-    completedTickets: 0,
-    totalTickets: 8,
-    capacity: 30,
-    used: 0,
-    risk: 'Low',
-    dependencies: [4],
-    isCriticalPath: true
-  }];
-  const currentWeek = 6.5;
-  const totalWeeks = 12;
+  const [showSprintDropdown, setShowSprintDropdown] = useState(false);
+  // Gantt: derived from real sprints (computed safely — project may still be null here)
+  const projectStart = project?.startDate ? new Date(project.startDate) : null;
+  const sprintsGantt = realSprints.map((sprint: any) => {
+    const start = new Date(sprint.startDate);
+    const end = new Date(sprint.endDate);
+    const today = new Date();
+    const durationDays = Math.max(1, Math.ceil((end.getTime() - start.getTime()) / 86400000));
+    const elapsedDays = Math.max(0, Math.ceil((Math.min(today.getTime(), end.getTime()) - start.getTime()) / 86400000));
+    const progress = sprint.status === 'COMPLETED' ? 100
+      : sprint.status === 'ACTIVE' ? Math.round((elapsedDays / durationDays) * 100)
+      : 0;
+    const startOffsetDays = projectStart
+      ? Math.max(0, Math.ceil((start.getTime() - projectStart.getTime()) / 86400000))
+      : 0;
+    return {
+      id: sprint.id,
+      name: sprint.name,
+      startDay: startOffsetDays,
+      durationDays,
+      progress,
+      status: sprint.status === 'COMPLETED' ? 'completed' : sprint.status === 'ACTIVE' ? 'active' : 'pending',
+      capacity: sprint.capacity ?? 0,
+    };
+  });
+  const totalProjectDays = project?.startDate && project?.targetEndDate
+    ? Math.max(1, Math.ceil((new Date(project.targetEndDate).getTime() - new Date(project.startDate).getTime()) / 86400000))
+    : 60;
+  const currentDayOffset = projectStart
+    ? Math.max(0, Math.ceil((new Date().getTime() - projectStart.getTime()) / 86400000))
+    : 0;
+
   const handleRegisterProgress = () => {
-    console.log('Progress registered:', progressData);
+    // Funcionalidad pendiente de implementar en backend
+    toast.info('Registro de progreso no disponible aún');
     setShowProgressModal(false);
-    setProgressData({
-      percentage: '',
-      note: '',
-      blocker: ''
-    });
+    setProgressData({ percentage: '', note: '', blocker: '' });
   };
 const handleCreateSprint = async () => {
   try {
@@ -454,14 +424,15 @@ const handleCreateSprint = async () => {
     await loadDashboard();
 
     setShowSprintModal(false);
+    toast.success('Sprint creado correctamente');
   } catch (error:any) {
-    alert(error.message);
+    toast.error(error.message || 'No se pudo crear el sprint');
   }
 };
 const handleCreateTicket = async () => {
   try {
     if (ticketData.startDate && ticketData.dueDate && new Date(ticketData.dueDate) < new Date(ticketData.startDate)) {
-      alert('La fecha límite no puede ser anterior a la fecha de inicio.');
+      toast.error('La fecha límite no puede ser anterior a la fecha de inicio.');
       return;
     }
 
@@ -493,6 +464,7 @@ body: JSON.stringify({
   assignedToId: ticketData.assignee || null,
   startDate: ticketData.startDate || null,
   dueDate: ticketData.dueDate || null,
+  parentTicketId: ticketData.parentTicketId || null,
 }),
     });
 
@@ -501,22 +473,14 @@ body: JSON.stringify({
     await loadDashboard();
 
     setShowTicketModal(false);
-
-setTicketData({
-  title: "",
-  estimation: "",
-  assignee: "",
-  priority: "Medium",
-  description: "",
-  status: "Backlog",
-  sprintId: "",
-  parentTicketId: "",
-  startDate: "",
-  dueDate: "",
-  estimatedHours: "",
-});
+    toast.success('Ticket creado correctamente');
+    setTicketData({
+      title: "", estimation: "", assignee: "", priority: "Medium",
+      description: "", status: "Backlog", sprintId: "", parentTicketId: "",
+      startDate: "", dueDate: "", estimatedHours: "",
+    });
   } catch (error: any) {
-    alert(error.message);
+    toast.error(error.message || 'No se pudo crear el ticket');
   }
 };
   const handleDivideTicket = (ticket: Ticket) => {
@@ -545,79 +509,80 @@ setTicketData({
       setSubTicketsData(subTicketsData.filter((_, i) => i !== index));
     }
   };
-  const handleConfirmDivision = () => {
+  const handleConfirmDivision = async () => {
     if (!ticketToDivide) return;
     const validSubTickets = subTicketsData.filter(st => st.title && st.estimation);
     if (validSubTickets.length < 1) {
-      alert('⚠️ Debes crear al menos 1 subticket con título y estimación.');
+      toast.error('Debes crear al menos 1 subticket con título y estimación.');
       return;
     }
-    const totalPoints = validSubTickets.reduce((sum, st) => sum + (parseInt(st.estimation) || 0), 0);
-    const newSubTickets = validSubTickets.map((st, index) => ({
-      id: `${ticketToDivide.id}-sub${index + 1}`,
-      title: st.title,
-      description: st.description,
-      status: 'Backlog' as const,
-      priority: st.priority as 'Low' | 'Medium' | 'High',
-      assignee: st.assignee,
-      estimation: parseInt(st.estimation) || 0,
-      sprintId: ticketToDivide.sprintId,
-      startDate: ticketToDivide.startDate,
-      endDate: ticketToDivide.endDate,
-      parentTicketId: ticketToDivide.id
-    }));
-    console.log('Ticket dividido en subtickets:', {
-      parentTicket: ticketToDivide,
-      subTickets: newSubTickets,
-      totalPoints: totalPoints
-    });
-    alert(`✅ Ticket dividido exitosamente!\n\n📋 Ticket padre: ${ticketToDivide.title}\n🔢 ${newSubTickets.length} subtickets creados\n⏱️ Total story points: ${totalPoints}h\n\nLos subtickets aparecerán en la tabla/kanban y Gantt anidados bajo el ticket padre.`);
+
+    const priorityMap: any = { Critical: 'CRITICAL', High: 'HIGH', Medium: 'MEDIUM', Low: 'LOW' };
+    const sprintId = ticketToDivide.sprintId;
+
+    const results = await Promise.allSettled(
+      validSubTickets.map(st =>
+        authFetch(`/tickets/sprint/${sprintId}`, {
+          method: 'POST',
+          body: JSON.stringify({
+            title: st.title,
+            description: st.description || null,
+            priority: priorityMap[st.priority] || 'MEDIUM',
+            status: 'TODO',
+            storyPoints: parseInt(st.estimation) || 0,
+            assignedToId: st.assignee || null,
+            parentTicketId: ticketToDivide.id,
+          }),
+        })
+      )
+    );
+
+    const succeeded = results.filter(r => r.status === 'fulfilled').length;
+    const failed = results.filter(r => r.status === 'rejected').length;
+
+    if (succeeded > 0) {
+      const reloaded = await authFetch(`/tickets/sprint/${sprintId}`);
+      setRealTickets((prev) => {
+        const notFromThisSprint = prev.filter((t: any) => t.sprintId !== sprintId);
+        return [...notFromThisSprint, ...(reloaded.tickets || [])];
+      });
+      await loadDashboard();
+      toast.success(`${succeeded} subticket(s) creados correctamente${failed > 0 ? `, ${failed} fallaron` : ''}`);
+    } else {
+      toast.error('No se pudo crear ningún subticket');
+    }
+
     setShowDivideTicketModal(false);
     setTicketToDivide(null);
-    setShowDivideTicketModal(false);
-    setTicketToDivide(null);
-    setSubTicketsData([{
-      title: '',
-      estimation: '',
-      assignee: '',
-      priority: 'Medium',
-      description: ''
-    }, {
-      title: '',
-      estimation: '',
-      assignee: '',
-      priority: 'Medium',
-      description: ''
-    }]);
+    setSubTicketsData([{ title: '', estimation: '', assignee: '', priority: 'Medium', description: '' }]);
   };
 const handleAddDeveloper = async () => {
   try {
     if (!selectedDeveloperId) {
-      alert("Selecciona un developer");
+      toast.error("Selecciona un developer");
       return;
     }
 
     await authFetch(`/projects/${id}/members`, {
       method: "POST",
-      body: JSON.stringify({
-        userId: selectedDeveloperId,
-      }),
+      body: JSON.stringify({ userId: selectedDeveloperId }),
     });
 
-    const data = await authFetch<{ projects: BackendProject[] }>("/projects");
-    setBackendProjects(data.projects || []);
+    const data = await authFetch<{ project: BackendProject }>(`/projects/${id}`);
+    setBackendProjects((prev) => prev.map(p => p.id === id ? data.project : p));
     await loadDashboard();
 
     setShowAddDeveloperModal(false);
     setSelectedDeveloperId("");
+    toast.success("Developer agregado al proyecto");
   } catch (error: any) {
-    alert(error.message || "No se pudo agregar el developer");
+    toast.error(error.message || "No se pudo agregar el developer");
   }
 };
 const handleStartSprint = async (sprintId: string) => {
   try {
     if (!sprintId || generalSprintFilters.includes(sprintId)) {
-      alert('Selecciona un sprint específico para iniciarlo.');
+      toast.error('Selecciona un sprint específico para iniciarlo.');
       return;
     }
 
@@ -633,15 +598,16 @@ const handleStartSprint = async (sprintId: string) => {
 
     await loadDashboard();
     setSprintFilter(sprintId);
+    toast.success('Sprint iniciado');
   } catch (error: any) {
-    alert(error.message || 'No se pudo iniciar el sprint');
+    toast.error(error.message || 'No se pudo iniciar el sprint');
   }
 };
 
 const handleCompleteSprint = async () => {
   try {
     if (generalSprintFilters.includes(sprintFilter)) {
-      alert('Selecciona un sprint específico para concluirlo.');
+      toast.error('Selecciona un sprint específico para concluirlo.');
       return;
     }
 
@@ -663,12 +629,27 @@ const handleCompleteSprint = async () => {
     );
 
     setSprintFilter(nextActiveSprint?.id || 'active');
+    toast.success('Sprint concluido correctamente');
   } catch (error: any) {
-    alert(error.message || 'No se pudo concluir el sprint');
+    toast.error(error.message || 'No se pudo concluir el sprint');
   }
 };
   const userTickets = realTickets.map(mapBackendTicketToUi);
   const sprintFilteredTickets = userTickets;
+
+  const developerProgressData = useMemo(() => {
+    if (role !== 'DEVELOPER' || !user?.name) return [];
+    return realSprints.map((sprint: any) => {
+      const myTickets = userTickets.filter(
+        (t) => t.sprintId === sprint.id && (t.assignee === user.name || t.assignee?.includes(user.name))
+      );
+      const planned = myTickets.reduce((sum, t) => sum + (Number(t.estimatedHours) || 0), 0);
+      const actual = myTickets
+        .filter((t) => t.status === 'Done')
+        .reduce((sum, t) => sum + (Number(t.actualHours) || 0), 0);
+      return { date: sprint.name, planned, actual };
+    }).filter((d) => d.planned > 0 || d.actual > 0);
+  }, [role, user?.name, realSprints, userTickets]);
   const finalFilteredTickets = role === 'DEVELOPER' && showMyTicketsOnly ? sprintFilteredTickets.filter(t => t.assignee === user.name || t.assignee.includes(user.name)) : sprintFilteredTickets;
   const backlogTickets = finalFilteredTickets;
   const sprintTickets = finalFilteredTickets;
@@ -748,7 +729,7 @@ const filteredKpis = {
   risk: dashboard?.kpis?.risk ? mapDashboardRiskToUi(dashboard.kpis.risk) : 'N/A',
 };
   const canManageProject = user.role === 'PM' || user.role === 'ADMIN';
-  const canEditTickets = true;
+  const canEditTickets = user.role === 'ADMIN' || user.role === 'PM' || user.role === 'DEVELOPER';
 const handleTicketUpdate = async (ticketId: string, updates: any) => {
   try {
     const priorityMap: any = {
@@ -802,7 +783,7 @@ const handleTicketUpdate = async (ticketId: string, updates: any) => {
 
     setSelectedTicket(null);
   } catch (error: any) {
-    alert(error.message || "No se pudo actualizar el ticket");
+    toast.error(error.message || "No se pudo actualizar el ticket");
   }
 };
   const priorityColors: any = {
@@ -831,15 +812,65 @@ if (projectLoadError && !backendProject) {
     </div>
   );
 }
-  const handleCloseProject = () => {
-    console.log('Cerrando proyecto:', project.name);
-    project.status = 'Archived';
-    project.closedDate = new Date().toISOString().split('T')[0];
-    project.closedBy = user.name;
-    setShowCloseProjectModal(false);
-    alert(`Proyecto "${project.name}" archivado exitosamente.`);
-    navigate('/archived-projects');
+  const handleCloseProject = async () => {
+    try {
+      await authFetch(`/projects/${id}/status`, {
+        method: 'PATCH',
+        body: JSON.stringify({ status: 'ARCHIVED' }),
+      });
+      setShowCloseProjectModal(false);
+      toast.success(`Proyecto "${project.name}" archivado correctamente`);
+      navigate('/archived-projects');
+    } catch (error: any) {
+      toast.error(error.message || 'No se pudo archivar el proyecto');
+    }
   };
+  const handleSaveEditProject = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setEditProjectError('');
+    if (!editProjectForm.name.trim()) { setEditProjectError('El nombre es obligatorio'); return; }
+    if (!editProjectForm.startDate || !editProjectForm.targetEndDate) { setEditProjectError('Las fechas son obligatorias'); return; }
+    if (new Date(editProjectForm.targetEndDate) < new Date(editProjectForm.startDate)) {
+      setEditProjectError('La fecha de fin no puede ser anterior a la fecha de inicio');
+      return;
+    }
+    try {
+      setIsSavingProject(true);
+      const updated = await authFetch<{ project: BackendProject }>(`/projects/${id}`, {
+        method: 'PUT',
+        body: JSON.stringify({
+          name: editProjectForm.name.trim(),
+          description: editProjectForm.description.trim() || null,
+          pmId: editProjectForm.pmId || null,
+          riskLevel: editProjectForm.riskLevel,
+          startDate: editProjectForm.startDate,
+          targetEndDate: editProjectForm.targetEndDate,
+          budget: editProjectForm.budget ? Number(editProjectForm.budget) : null,
+        }),
+      });
+      setBackendProjects((prev) => prev.map(p => p.id === id ? updated.project : p));
+      setShowEditProjectModal(false);
+      toast.success('Proyecto actualizado correctamente');
+    } catch (err: any) {
+      setEditProjectError(err.message || 'No se pudo actualizar el proyecto');
+    } finally {
+      setIsSavingProject(false);
+    }
+  };
+
+  const handleRemoveMember = async (memberId: string, memberName: string) => {
+    if (!window.confirm(`¿Quitar a ${memberName} del proyecto?`)) return;
+    try {
+      await authFetch(`/projects/${id}/members/${memberId}`, { method: 'DELETE' });
+      const data = await authFetch<{ project: BackendProject }>(`/projects/${id}`);
+      setBackendProjects((prev) => prev.map(p => p.id === id ? data.project : p));
+      await loadDashboard();
+      toast.success(`${memberName} removido del proyecto`);
+    } catch (err: any) {
+      toast.error(err.message || 'No se pudo quitar al miembro');
+    }
+  };
+
   const KpiTooltip = ({ text }: { text: string }) => (
   <span className="relative group inline-flex">
     <Info className="w-4 h-4 text-[#8E8E93] cursor-help" />
@@ -867,46 +898,124 @@ if (projectLoadError && !backendProject) {
               <p className="text-sm text-[#8E8E93]">Gestión completa del proyecto</p>
             </div>
             
-            {}
-            {role === 'ADMIN' && project.status !== 'Archived' && <div>
-                <button onClick={() => setShowCloseProjectModal(true)} className="px-4 py-2 bg-purple-500/10 hover:bg-purple-500/20 border border-purple-500/30 rounded-lg text-purple-400 text-sm font-medium transition-all flex items-center gap-2">
-                  <Archive className="w-4 h-4" />
-                  Cerrar Proyecto
+            {canManageProject && project.status !== 'Archived' && (
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => {
+                    setEditProjectForm({
+                      name: backendProject?.name ?? '',
+                      description: backendProject?.description ?? '',
+                      pmId: backendProject?.pm?.id ?? '',
+                      riskLevel: backendProject?.riskLevel ?? 'LOW',
+                      startDate: backendProject?.startDate ? new Date(backendProject.startDate).toISOString().split('T')[0] : '',
+                      targetEndDate: backendProject?.targetEndDate ? new Date(backendProject.targetEndDate).toISOString().split('T')[0] : '',
+                      budget: backendProject?.budget != null ? String(backendProject.budget) : '',
+                    });
+                    setEditProjectError('');
+                    setShowEditProjectModal(true);
+                  }}
+                  className="px-4 py-2 bg-blue-500/10 hover:bg-blue-500/20 border border-blue-500/30 rounded-lg text-blue-400 text-sm font-medium transition-all flex items-center gap-2"
+                >
+                  <Edit3 className="w-4 h-4" />
+                  Editar
                 </button>
-              </div>}
+                {role === 'ADMIN' && (
+                  <button onClick={() => setShowCloseProjectModal(true)} className="px-4 py-2 bg-purple-500/10 hover:bg-purple-500/20 border border-purple-500/30 rounded-lg text-purple-400 text-sm font-medium transition-all flex items-center gap-2">
+                    <Archive className="w-4 h-4" />
+                    Cerrar Proyecto
+                  </button>
+                )}
+              </div>
+            )}
           </div>
         </div>
       </div>
 
       <div className="p-6 md:p-8 space-y-8">
         {}
-        <div className="bg-gradient-to-r from-[#FF3B30]/10 to-[#FF3B30]/5 border border-[#FF3B30]/20 rounded-xl p-6 backdrop-blur-xl">
-          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-            <div className="flex items-center gap-3">
-              <div className="p-3 bg-[#FF3B30]/10 rounded-lg">
-                <Calendar className="w-6 h-6 text-[#FF3B30]" />
-              </div>
+        {(() => {
+          const quickViews = [
+            { id: 'active',   label: 'Sprints Activos',   sub: 'Solo sprints en curso',         dot: 'bg-green-500' },
+            { id: 'upcoming', label: 'Próximos Sprints',  sub: 'Sprints aún no iniciados',       dot: 'bg-blue-500' },
+            { id: 'history',  label: 'Historial',         sub: 'Sprints cerrados y completados', dot: 'bg-[#8E8E93]' },
+            { id: 'all',      label: 'Todos los Sprints', sub: 'Vista completa del proyecto',    dot: 'bg-purple-500' },
+          ];
+          const activeLabel = quickViews.find(v => v.id === sprintFilter)?.label
+            ?? projectSprints.find(s => s.id === sprintFilter)?.name
+            ?? 'Seleccionar sprint';
+          const statusDot = (status: string) =>
+            status === 'Active' ? 'bg-green-500' : status === 'Completed' ? 'bg-[#8E8E93]' : 'bg-blue-500';
+          const statusLabel = (status: string) =>
+            status === 'Active' ? 'Activo' : status === 'Completed' ? 'Cerrado' : 'Próximo';
+
+          return (
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 px-1">
               <div>
-                <h3 className="text-lg font-semibold text-white">Filtrar por Sprint</h3>
-                <p className="text-sm text-[#8E8E93]">Todos los KPIs, métricas y diagramas se ajustarán al sprint seleccionado</p>
+                <p className="text-sm font-medium text-white">Filtrar por Sprint</p>
+                <p className="text-xs text-[#8E8E93] mt-0.5">KPIs y métricas se ajustan al sprint seleccionado</p>
+              </div>
+
+              <div className="relative">
+                <button
+                  onClick={() => setShowSprintDropdown(prev => !prev)}
+                  onBlur={() => setTimeout(() => setShowSprintDropdown(false), 150)}
+                  className="flex items-center gap-3 bg-[#1C1C1E] border border-white/10 hover:border-white/20 rounded-xl px-4 py-2.5 text-sm text-white transition-all min-w-[220px] justify-between"
+                >
+                  <span className="font-medium truncate">{activeLabel}</span>
+                  <ChevronDown className={`w-4 h-4 text-[#8E8E93] flex-shrink-0 transition-transform ${showSprintDropdown ? 'rotate-180' : ''}`} />
+                </button>
+
+                {showSprintDropdown && (
+                  <div className="absolute right-0 top-full mt-1 w-72 bg-[#1C1C1E] border border-white/10 rounded-xl shadow-2xl z-50 overflow-hidden">
+                    {/* Vistas rápidas */}
+                    <div className="px-3 pt-2.5 pb-1">
+                      <p className="text-[10px] font-semibold text-[#8E8E93] uppercase tracking-wider">Vistas rápidas</p>
+                    </div>
+                    {quickViews.map(v => (
+                      <button
+                        key={v.id}
+                        onMouseDown={() => { setSprintFilter(v.id); setShowSprintDropdown(false); }}
+                        className={`w-full flex items-center gap-3 px-3 py-2.5 text-left transition-colors hover:bg-white/5 ${sprintFilter === v.id ? 'bg-white/5' : ''}`}
+                      >
+                        <div className={`w-2 h-2 rounded-full flex-shrink-0 ${v.dot}`} />
+                        <div className="min-w-0">
+                          <p className={`text-sm font-medium ${sprintFilter === v.id ? 'text-[#FF3B30]' : 'text-white'}`}>{v.label}</p>
+                          <p className="text-[11px] text-[#8E8E93]">{v.sub}</p>
+                        </div>
+                        {sprintFilter === v.id && <div className="ml-auto w-1.5 h-1.5 rounded-full bg-[#FF3B30] flex-shrink-0" />}
+                      </button>
+                    ))}
+
+                    {projectSprints.length > 0 && (
+                      <>
+                        <div className="mx-3 my-1.5 border-t border-white/10" />
+                        <div className="px-3 pt-1 pb-1">
+                          <p className="text-[10px] font-semibold text-[#8E8E93] uppercase tracking-wider">Sprint específico</p>
+                        </div>
+                        <div className="max-h-48 overflow-y-auto">
+                          {projectSprints.map(sprint => (
+                            <button
+                              key={sprint.id}
+                              onMouseDown={() => { setSprintFilter(sprint.id); setShowSprintDropdown(false); }}
+                              className={`w-full flex items-center gap-3 px-3 py-2 text-left transition-colors hover:bg-white/5 ${sprintFilter === sprint.id ? 'bg-white/5' : ''}`}
+                            >
+                              <div className={`w-2 h-2 rounded-full flex-shrink-0 ${statusDot(sprint.status)}`} />
+                              <div className="min-w-0 flex-1">
+                                <p className={`text-sm truncate ${sprintFilter === sprint.id ? 'text-[#FF3B30] font-medium' : 'text-white'}`}>{sprint.name}</p>
+                              </div>
+                              <span className="text-[10px] text-[#8E8E93] flex-shrink-0">{statusLabel(sprint.status)}</span>
+                            </button>
+                          ))}
+                        </div>
+                      </>
+                    )}
+                    <div className="h-1.5" />
+                  </div>
+                )}
               </div>
             </div>
-            <div className="flex items-center gap-3">
-              <select value={sprintFilter} onChange={e => setSprintFilter(e.target.value)} className="bg-[#1C1C1E] border border-white/10 rounded-xl px-4 py-3 text-white text-sm focus:outline-none focus:ring-2 focus:ring-[#FF3B30] min-w-[250px]">
-                <option value="active">🏃 Sprints Activos</option>
-                <option value="history">✅ Historial / Sprints Cerrados</option>
-                <option value="upcoming">📅 Próximos Sprints</option>
-                <option value="all">📊 Todos los Sprints</option>
-{projectSprints.map(sprint => <option key={sprint.id} value={sprint.id}>
-                      {sprint.status === 'Active' && '🏃 '}
-                    {sprint.status === 'Completed' && '✅ '}
-                    {sprint.status === 'Upcoming' && '📅 '}
-                    {sprint.name}
-                  </option>)}
-              </select>
-            </div>
-          </div>
-        </div>
+          );
+        })()}
 
         {}
 <section>
@@ -973,7 +1082,7 @@ if (projectLoadError && !backendProject) {
             bg: 'bg-cyan-500/10',
           },
           {
-            value: 'N/A',
+            value: userRank ? `#${userRank}` : '—',
             label: 'Ranking',
             icon: Award,
             color: 'text-yellow-500',
@@ -1206,18 +1315,25 @@ if (projectLoadError && !backendProject) {
                         </div>
                       </div>
 
-                      {}
                       <div className="flex items-center justify-between">
-                        <span className="text-xs text-[#8E8E93]">Estado</span>
-                        <Badge variant={member.status === 'Active' ? 'default' : 'danger'} className="text-xs">
-                          {member.status}
-                        </Badge>
+                        <span className="text-xs text-[#8E8E93]">Completados</span>
+                        <span className="text-xs font-semibold text-green-400">
+                          {dashboard?.teamMetrics?.find((m: any) => m.id === member.id)?.ticketsCompleted ?? '—'}
+                        </span>
                       </div>
                     </div>
 
-                    {}
-                    <div className="mt-3 pt-3 border-t border-white/10 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <div className="mt-3 pt-3 border-t border-white/10 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-between gap-2">
                       <p className="text-xs text-[#8E8E93] truncate">{member.email}</p>
+                      {canManageProject && backendProject?.pm?.id !== member.id && (
+                        <button
+                          onClick={() => handleRemoveMember(member.id, member.name)}
+                          className="flex-shrink-0 p-1 rounded hover:bg-[#FF3B30]/20 text-[#8E8E93] hover:text-[#FF3B30] transition-colors"
+                          title="Quitar miembro"
+                        >
+                          <X className="w-3.5 h-3.5" />
+                        </button>
+                      )}
                     </div>
                   </div>)}
               </div>
@@ -1290,7 +1406,7 @@ if (projectLoadError && !backendProject) {
           </h2>
           <div className="bg-[#1C1C1E] border border-white/10 rounded-xl p-6 backdrop-blur-xl">
             <ResponsiveContainer width="100%" height={350}>
-<LineChart data={project.progressHistory?.length ? project.progressHistory : []}>
+<LineChart data={role === 'DEVELOPER' ? developerProgressData : (project.progressHistory?.length ? project.progressHistory : [])}>
                 <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
                 <XAxis dataKey="date" stroke="#8E8E93" tick={{
                 fill: '#8E8E93',
@@ -1300,7 +1416,7 @@ if (projectLoadError && !backendProject) {
                 fill: '#8E8E93',
                 fontSize: 12
               }} label={{
-                value:  'Progreso (%)',
+                value: role === 'DEVELOPER' ? 'Horas' : 'Progreso (%)',
                 angle: -90,
                 position: 'insideLeft',
                 fill: '#8E8E93',
@@ -1491,7 +1607,7 @@ if (projectLoadError && !backendProject) {
                 : activeSprint?.id || '';
 
               if (!sprintIdForNewTicket) {
-                alert('Primero inicia o selecciona un sprint específico para crear tickets.');
+                toast.error('Primero inicia o selecciona un sprint específico para crear tickets.');
                 return;
               }
 
@@ -3200,6 +3316,92 @@ setTicketData({
           </div>
         </div>}
 
+      {/* Modal Editar Proyecto */}
+      {showEditProjectModal && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-[#1C1C1E] border border-white/10 rounded-xl w-full max-w-xl max-h-[90vh] overflow-y-auto">
+            <div className="sticky top-0 bg-[#1C1C1E] border-b border-white/10 p-5 flex items-center justify-between">
+              <h3 className="text-lg font-semibold text-white flex items-center gap-2">
+                <Edit3 className="w-5 h-5 text-[#FF3B30]" /> Editar Proyecto
+              </h3>
+              <button onClick={() => setShowEditProjectModal(false)} className="p-1.5 hover:bg-white/10 rounded-lg">
+                <X className="w-5 h-5 text-[#8E8E93]" />
+              </button>
+            </div>
+            <form className="p-5 space-y-4" onSubmit={handleSaveEditProject}>
+              <div>
+                <label className="block text-sm font-medium text-[#8E8E93] mb-1.5">Nombre *</label>
+                <input type="text" value={editProjectForm.name}
+                  onChange={e => setEditProjectForm({...editProjectForm, name: e.target.value})}
+                  className="w-full px-3 py-2.5 bg-[#0F0F0F] border border-white/10 rounded-lg text-white text-sm focus:border-[#FF3B30] outline-none"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-[#8E8E93] mb-1.5">Descripción</label>
+                <textarea rows={3} value={editProjectForm.description}
+                  onChange={e => setEditProjectForm({...editProjectForm, description: e.target.value})}
+                  className="w-full px-3 py-2.5 bg-[#0F0F0F] border border-white/10 rounded-lg text-white text-sm focus:border-[#FF3B30] outline-none resize-none"
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-[#8E8E93] mb-1.5">Fecha de Inicio *</label>
+                  <input type="date" value={editProjectForm.startDate}
+                    onChange={e => setEditProjectForm({...editProjectForm, startDate: e.target.value})}
+                    className="w-full px-3 py-2.5 bg-[#0F0F0F] border border-white/10 rounded-lg text-white text-sm focus:border-[#FF3B30] outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-[#8E8E93] mb-1.5">Fecha de Fin *</label>
+                  <input type="date" value={editProjectForm.targetEndDate}
+                    onChange={e => setEditProjectForm({...editProjectForm, targetEndDate: e.target.value})}
+                    className="w-full px-3 py-2.5 bg-[#0F0F0F] border border-white/10 rounded-lg text-white text-sm focus:border-[#FF3B30] outline-none"
+                  />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-[#8E8E93] mb-1.5">Nivel de Riesgo</label>
+                  <select value={editProjectForm.riskLevel}
+                    onChange={e => setEditProjectForm({...editProjectForm, riskLevel: e.target.value})}
+                    className="w-full px-3 py-2.5 bg-[#0F0F0F] border border-white/10 rounded-lg text-white text-sm focus:border-[#FF3B30] outline-none"
+                  >
+                    <option value="LOW">Bajo</option>
+                    <option value="MEDIUM">Medio</option>
+                    <option value="HIGH">Alto</option>
+                    <option value="CRITICAL">Crítico</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-[#8E8E93] mb-1.5">Presupuesto (USD)</label>
+                  <input type="number" min="0" value={editProjectForm.budget}
+                    onChange={e => setEditProjectForm({...editProjectForm, budget: e.target.value})}
+                    placeholder="50000"
+                    className="w-full px-3 py-2.5 bg-[#0F0F0F] border border-white/10 rounded-lg text-white text-sm focus:border-[#FF3B30] outline-none placeholder-[#8E8E93]"
+                  />
+                </div>
+              </div>
+              {editProjectError && (
+                <div className="flex items-center gap-2 p-3 bg-[#FF3B30]/10 border border-[#FF3B30]/20 rounded-lg">
+                  <AlertTriangle className="w-4 h-4 text-[#FF3B30] flex-shrink-0" />
+                  <p className="text-sm text-[#FF3B30]">{editProjectError}</p>
+                </div>
+              )}
+              <div className="flex gap-3 pt-2 border-t border-white/10">
+                <button type="button" onClick={() => setShowEditProjectModal(false)}
+                  className="flex-1 px-4 py-2.5 bg-transparent border border-white/20 rounded-lg text-white text-sm hover:bg-white/5 transition-all">
+                  Cancelar
+                </button>
+                <button type="submit" disabled={isSavingProject}
+                  className="flex-1 px-4 py-2.5 bg-[#FF3B30] rounded-lg text-white text-sm font-medium hover:bg-[#FF3B30]/90 transition-all disabled:opacity-60">
+                  {isSavingProject ? 'Guardando...' : 'Guardar Cambios'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
       {}
       {showCloseProjectModal && <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4">
           <div className="bg-[#1C1C1E] border border-white/10 rounded-xl p-6 max-w-lg w-full">
@@ -3230,9 +3432,26 @@ setTicketData({
               </div>
             </div>
 
+            {(() => {
+              const activeSprints = realSprints.filter((s: any) => s.status === 'ACTIVE').length;
+              const openTickets = realTickets.filter((t: any) => ['IN_PROGRESS', 'BLOCKED'].includes(t.status)).length;
+              return (activeSprints > 0 || openTickets > 0) ? (
+                <div className="bg-orange-500/10 border border-orange-500/30 rounded-lg p-4 mb-6 space-y-1">
+                  <p className="text-xs font-semibold text-orange-400 mb-2 flex items-center gap-1">
+                    <AlertTriangle className="w-3.5 h-3.5" /> Atención: trabajo en curso
+                  </p>
+                  {activeSprints > 0 && (
+                    <p className="text-xs text-orange-300">• {activeSprints} sprint{activeSprints > 1 ? 's' : ''} activo{activeSprints > 1 ? 's' : ''}</p>
+                  )}
+                  {openTickets > 0 && (
+                    <p className="text-xs text-orange-300">• {openTickets} ticket{openTickets > 1 ? 's' : ''} en progreso o bloqueado{openTickets > 1 ? 's' : ''}</p>
+                  )}
+                </div>
+              ) : null;
+            })()}
             <div className="bg-yellow-500/10 border border-yellow-500/20 rounded-lg p-4 mb-6">
               <p className="text-xs text-yellow-400">
-                <strong>Nota:</strong> Esta acción es permanente. El proyecto solo puede ser accedido desde el Archivo de Proyectos.
+                <strong>Nota:</strong> El proyecto puede ser restaurado desde el Archivo de Proyectos.
               </p>
             </div>
 

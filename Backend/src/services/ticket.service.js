@@ -1,4 +1,5 @@
 const prisma = require("../config/prisma");
+const { clearLeaderboardCache } = require("./gamification.service");
 
 async function validateProjectAccess({ projectId, userId, role }) {
   const project = await prisma.project.findFirst({
@@ -29,7 +30,7 @@ async function validateProjectAccess({ projectId, userId, role }) {
       project.members.length > 0;
 
     if (!hasAccess) {
-      throw new Error("No tienes acceso a este proyecto");
+      throw new Error("El proyecto no existe o no tienes acceso");
     }
 
     return project;
@@ -37,13 +38,13 @@ async function validateProjectAccess({ projectId, userId, role }) {
 
   if (role === "DEVELOPER" || role === "VIEWER") {
     if (project.members.length === 0) {
-      throw new Error("No tienes acceso a este proyecto");
+      throw new Error("El proyecto no existe o no tienes acceso");
     }
 
     return project;
   }
 
-  throw new Error("Rol no autorizado");
+  throw new Error("No tienes permisos para acceder a este recurso");
 }
 
 async function createTicket({
@@ -430,6 +431,11 @@ async function updateTicketStatus({ ticketId, status, actualHours, userId, role 
   const isMovingToInProgress = status === "IN_PROGRESS" && !ticket.startedAt;
   const isMovingToDone = status === "DONE";
   const isLeavingDone = ticket.status === "DONE" && status !== "DONE";
+
+  // Invalidate leaderboard cache when points change (ticket completes or un-completes)
+  if (isMovingToDone || isLeavingDone) {
+    clearLeaderboardCache();
+  }
 
   const updatedTicket = await prisma.ticket.update({
     where: {

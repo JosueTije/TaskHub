@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Link } from 'react-router';
-import { Search, Plus, Target, AlertTriangle, TrendingUp, TrendingDown, Clock, Grid3x3, List, ArrowRight, Users, BarChart3, Sparkles, FileText, Zap, CheckCircle2, XCircle, UserPlus, X, Calendar, Briefcase } from 'lucide-react';
+import { toast } from 'sonner';
+import { Search, Plus, Target, AlertTriangle, TrendingUp, TrendingDown, Clock, Grid3x3, List, ArrowRight, Users, BarChart3, CheckCircle2, XCircle, UserPlus, X, Calendar, Briefcase, Eye, EyeOff } from 'lucide-react';
 import { Badge } from '../components/ui/badge';
 import { Button } from '../components/ui/button';
 import { useAuth } from '../contexts/AuthContext';
@@ -59,6 +60,22 @@ interface BackendProject {
   };
 }
 
+interface ProjectAnalytics {
+  kpis: {
+    progress: number;
+    plannedProgress: number;
+    scheduleVariance: number;
+    spi: number;
+    risk: 'LOW' | 'MEDIUM' | 'HIGH';
+    blockedTickets: number;
+    delayedMilestones: number;
+  };
+}
+
+interface EnrichedProject extends BackendProject {
+  analytics: ProjectAnalytics | null;
+}
+
 interface CreateProjectResponse {
   message: string;
   project: {
@@ -69,11 +86,14 @@ interface CreateProjectResponse {
 }
 
 export function Projects() {
+  const { user, theme } = useAuth();
+  const role = user?.role || 'DEVELOPER';
+
   const [backendUsers, setBackendUsers] = useState<BackendUser[]>([]);
   const [isLoadingUsers, setIsLoadingUsers] = useState(false);
   const [isCreatingProject, setIsCreatingProject] = useState(false);
   const [projectError, setProjectError] = useState('');
-  const [backendProjects, setBackendProjects] = useState<BackendProject[]>([]);
+  const [backendProjects, setBackendProjects] = useState<EnrichedProject[]>([]);
   const [isLoadingProjects, setIsLoadingProjects] = useState(true);
   const [projectsError, setProjectsError] = useState('');
 
@@ -94,7 +114,22 @@ export function Projects() {
       setProjectsError('');
 
       const data = await authFetch<{ projects: BackendProject[] }>('/projects');
-      setBackendProjects(data.projects);
+
+      const analyticsResults = await Promise.allSettled(
+        data.projects.map((p) =>
+          authFetch<ProjectAnalytics>(`/analytics/project/${p.id}/dashboard`)
+        )
+      );
+
+      const enriched: EnrichedProject[] = data.projects.map((p, i) => ({
+        ...p,
+        analytics:
+          analyticsResults[i].status === 'fulfilled'
+            ? (analyticsResults[i] as PromiseFulfilledResult<ProjectAnalytics>).value
+            : null,
+      }));
+
+      setBackendProjects(enriched);
     } catch (err: any) {
       setProjectsError(err.message || 'No se pudieron cargar los proyectos');
     } finally {
@@ -104,7 +139,7 @@ export function Projects() {
 
   useEffect(() => {
     loadProjects();
-  }, []);
+  }, [user?.id]);
   useEffect(() => {
   const loadUsers = async () => {
     try {
@@ -142,12 +177,14 @@ export function Projects() {
     return words.map((word) => word[0]).join('').slice(0, 6);
   };
 
-  const { user, theme } = useAuth();
-  const role = user?.role || 'DEVELOPER';
   const [viewMode, setViewMode] = useState<ViewMode>('grid');
   const [searchQuery, setSearchQuery] = useState('');
   const [showCreateProjectModal, setShowCreateProjectModal] = useState(false);
   const [showCreateUserModal, setShowCreateUserModal] = useState(false);
+  const [userForm, setUserForm] = useState({ fullName: '', email: '', role: '', temporaryPassword: '' });
+  const [isCreatingUser, setIsCreatingUser] = useState(false);
+  const [userError, setUserError] = useState('');
+  const [showTempPassword, setShowTempPassword] = useState(false);
 
   const colors = {
     bg: theme === 'dark' ? 'bg-[#0F0F0F]' : 'bg-[#F6F2EA]',
@@ -165,24 +202,49 @@ export function Projects() {
 
   const userProjects = backendProjects;
   const totalProjects = userProjects.length;
+  const thisMonthCount = userProjects.filter((p) => {
+    const created = new Date(p.createdAt);
+    return Date.now() - created.getTime() < 30 * 24 * 60 * 60 * 1000;
+  }).length;
 
-  const projectsAtRisk = userProjects.filter(
-    (p) => p.riskLevel === 'HIGH' || p.riskLevel === 'CRITICAL'
-  ).length;
+  const projectsWithAnalytics = userProjects.filter((p) => p.analytics);
 
-  const avgProgress = 'N/A';
-  const avgScheduleVariance = 'N/A';
+  const projectsAtRisk = userProjects.filter((p) => {
+    const risk = p.analytics?.kpis.risk ?? p.riskLevel;
+    return risk === 'HIGH' || risk === 'CRITICAL';
+  }).length;
+
+  const avgProgress =
+    projectsWithAnalytics.length > 0
+      ? Math.round(
+          projectsWithAnalytics.reduce((s, p) => s + p.analytics!.kpis.progress, 0) /
+            projectsWithAnalytics.length
+        )
+      : null;
+
+  const avgScheduleVariance =
+    projectsWithAnalytics.length > 0
+      ? Math.round(
+          projectsWithAnalytics.reduce((s, p) => s + p.analytics!.kpis.scheduleVariance, 0) /
+            projectsWithAnalytics.length
+        )
+      : null;
 
   const filteredProjects = userProjects.filter((project) =>
     project.name.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
-  const highRiskProjects = userProjects.filter(
-    (p) => p.riskLevel === 'HIGH' || p.riskLevel === 'CRITICAL'
-  );
+  const highRiskProjects = userProjects.filter((p) => {
+    const risk = p.analytics?.kpis.risk ?? p.riskLevel;
+    return risk === 'HIGH' || risk === 'CRITICAL';
+  });
 
-  const delayedMilestonesProjects: BackendProject[] = [];
-  const negativeTrendProjects: BackendProject[] = [];
+  const delayedMilestonesProjects = userProjects.filter(
+    (p) => p.analytics && p.analytics.kpis.delayedMilestones >= 1
+  );
+  const negativeTrendProjects = userProjects.filter(
+    (p) => p.analytics && p.analytics.kpis.scheduleVariance < -10
+  );
 
   const navigate = useNavigate();
 
@@ -235,13 +297,13 @@ export function Projects() {
         return;
       }
 
-      if (!projectForm.pmId) {
-        setProjectError('Debes seleccionar un Project Manager');
+      if (!projectForm.startDate || !projectForm.targetEndDate) {
+        setProjectError('Debes seleccionar fecha de inicio y fin');
         return;
       }
 
-      if (!projectForm.startDate || !projectForm.targetEndDate) {
-        setProjectError('Debes seleccionar fecha de inicio y fin');
+      if (new Date(projectForm.targetEndDate) < new Date(projectForm.startDate)) {
+        setProjectError('La fecha de fin no puede ser anterior a la fecha de inicio');
         return;
       }
 
@@ -253,7 +315,7 @@ export function Projects() {
           name: projectForm.name.trim(),
           code: projectForm.code.trim(),
           description: projectForm.description.trim() || null,
-          pmId: projectForm.pmId,
+          pmId: projectForm.pmId || null,
           riskLevel: projectForm.riskLevel,
           startDate: projectForm.startDate,
           targetEndDate: projectForm.targetEndDate,
@@ -262,7 +324,7 @@ export function Projects() {
         }),
       });
 
-      alert('Proyecto creado correctamente');
+      toast.success('Proyecto creado correctamente');
 
       setShowCreateProjectModal(false);
       setProjectForm({
@@ -281,6 +343,38 @@ export function Projects() {
       setProjectError(err.message || 'No se pudo crear el proyecto');
     } finally {
       setIsCreatingProject(false);
+    }
+  };
+
+  const handleCreateUserSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setUserError('');
+
+    if (!userForm.fullName.trim()) { setUserError('El nombre es obligatorio'); return; }
+    if (!userForm.email.trim() || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(userForm.email)) {
+      setUserError('Introduce un email válido'); return;
+    }
+    if (!userForm.role) { setUserError('Selecciona un rol'); return; }
+    if (!userForm.temporaryPassword.trim()) { setUserError('La contraseña temporal es obligatoria'); return; }
+
+    try {
+      setIsCreatingUser(true);
+      await authFetch('/admin/users', {
+        method: 'POST',
+        body: JSON.stringify({
+          fullName: userForm.fullName.trim(),
+          email: userForm.email.trim(),
+          role: userForm.role,
+          temporaryPassword: userForm.temporaryPassword.trim(),
+        }),
+      });
+      toast.success(`Usuario ${userForm.fullName.trim()} creado. Se le enviará un OTP al correo.`);
+      setShowCreateUserModal(false);
+      setUserForm({ fullName: '', email: '', role: '', temporaryPassword: '' });
+    } catch (err: any) {
+      setUserError(err.message || 'No se pudo crear el usuario');
+    } finally {
+      setIsCreatingUser(false);
     }
   };
 
@@ -304,7 +398,7 @@ export function Projects() {
               <p className={`text-sm ${colors.textSecondary}`}>Gestiona y monitorea todos tus proyectos asignados</p>
             </motion.div>
 
-            {role === 'ADMIN' && (
+            {(role === 'ADMIN' || role === 'PM') && (
               <motion.div
                 className="flex items-center gap-3"
                 initial={{ x: 20, opacity: 0 }}
@@ -436,9 +530,9 @@ export function Projects() {
                 <p className={`text-3xl font-bold ${colors.textPrimary} mb-1 relative z-10`}>{totalProjects}</p>
                 <p className={`text-sm ${colors.textSecondary} relative z-10`}>Total de Proyectos</p>
                 <div className={`mt-3 pt-3 border-t ${colors.border} relative z-10`}>
-                  <div className="flex items-center gap-1 text-xs text-green-500">
+                  <div className={`flex items-center gap-1 text-xs ${thisMonthCount > 0 ? 'text-green-500' : 'text-[#8E8E93]'}`}>
                     <TrendingUp className="w-3 h-3" />
-                    <span>+2 este mes</span>
+                    <span>{thisMonthCount > 0 ? `+${thisMonthCount} este mes` : 'Sin nuevos este mes'}</span>
                   </div>
                 </div>
               </motion.div>
@@ -506,10 +600,19 @@ export function Projects() {
                     <TrendingUp className="w-4 h-4 text-green-500" />
                   </motion.div>
                 </div>
-                <p className={`text-3xl font-bold ${colors.textPrimary} mb-1 relative z-10`}>{avgProgress}</p>
+                <p className={`text-3xl font-bold ${colors.textPrimary} mb-1 relative z-10`}>
+                  {avgProgress !== null ? `${avgProgress}%` : '—'}
+                </p>
                 <p className={`text-sm ${colors.textSecondary} relative z-10`}>Avance Promedio</p>
                 <div className={`mt-3 pt-3 border-t ${colors.border} relative z-10`}>
-                  <p className={`text-xs ${colors.textSecondary}`}>Disponible próximamente</p>
+                  {avgProgress !== null ? (
+                    <div className={`flex items-center gap-1 text-xs ${avgProgress >= 50 ? 'text-green-500' : 'text-yellow-500'}`}>
+                      {avgProgress >= 50 ? <TrendingUp className="w-3 h-3" /> : <TrendingDown className="w-3 h-3" />}
+                      <span>{avgProgress >= 50 ? 'Buen avance global' : 'Avance lento'}</span>
+                    </div>
+                  ) : (
+                    <p className={`text-xs ${colors.textSecondary}`}>Sin datos aún</p>
+                  )}
                 </div>
               </motion.div>
 
@@ -537,13 +640,19 @@ export function Projects() {
                     <TrendingDown className="w-4 h-4 text-[#FF3B30]" />
                   </motion.div>
                 </div>
-                <p className={`text-3xl font-bold ${colors.textPrimary} mb-1 relative z-10`}>{avgScheduleVariance}</p>
-                <p className={`text-sm ${colors.textSecondary} relative z-10`}>Schedule Variance</p>
+                <p className={`text-3xl font-bold mb-1 relative z-10 ${avgScheduleVariance !== null ? (avgScheduleVariance >= 0 ? 'text-green-500' : 'text-[#FF3B30]') : colors.textPrimary}`}>
+                  {avgScheduleVariance !== null ? `${avgScheduleVariance > 0 ? '+' : ''}${avgScheduleVariance}%` : '—'}
+                </p>
+                <p className={`text-sm ${colors.textSecondary} relative z-10`}>Schedule Variance Prom.</p>
                 <div className={`mt-3 pt-3 border-t ${colors.border} relative z-10`}>
-                  <div className="flex items-center gap-1 text-xs text-[#FF3B30]">
-                    <TrendingDown className="w-3 h-3" />
-                    <span>No disponible aún</span>
-                  </div>
+                  {avgScheduleVariance !== null ? (
+                    <div className={`flex items-center gap-1 text-xs ${avgScheduleVariance >= 0 ? 'text-green-500' : 'text-[#FF3B30]'}`}>
+                      {avgScheduleVariance >= 0 ? <TrendingUp className="w-3 h-3" /> : <TrendingDown className="w-3 h-3" />}
+                      <span>{avgScheduleVariance >= 0 ? 'Adelantado en promedio' : 'Retrasado en promedio'}</span>
+                    </div>
+                  ) : (
+                    <p className={`text-xs ${colors.textSecondary}`}>Sin datos aún</p>
+                  )}
                 </div>
               </motion.div>
             </div>
@@ -620,42 +729,54 @@ export function Projects() {
                       </div>
 
                       {/* Avance */}
-                      <div className="mb-4 relative z-10">
-                        <div className="flex items-center justify-between mb-2">
-                          <span className={`text-xs ${colors.textSecondary}`}>Avance del proyecto</span>
-                          <span className={`text-sm font-semibold ${colors.textPrimary}`}>N/A</span>
-                        </div>
-                        <div className={`w-full ${colors.bgTertiary} rounded-full h-2 overflow-hidden`}>
-                          <div className="bg-white/10 h-2 rounded-full w-full" />
-                        </div>
-                      </div>
+                      {(() => {
+                        const progress = project.analytics?.kpis.progress ?? null;
+                        const sv = project.analytics?.kpis.scheduleVariance;
+                        const spi = project.analytics?.kpis.spi;
+                        const milestones = project.analytics?.kpis.delayedMilestones;
+                        return (
+                          <>
+                            <div className="mb-4 relative z-10">
+                              <div className="flex items-center justify-between mb-2">
+                                <span className={`text-xs ${colors.textSecondary}`}>Avance del proyecto</span>
+                                <span className={`text-sm font-semibold ${colors.textPrimary}`}>
+                                  {progress !== null ? `${progress}%` : '—'}
+                                </span>
+                              </div>
+                              <div className={`w-full ${colors.bgTertiary} rounded-full h-2 overflow-hidden`}>
+                                <div
+                                  className="h-2 rounded-full transition-all duration-700"
+                                  style={{ width: `${progress ?? 0}%`, backgroundColor: colors.accent }}
+                                />
+                              </div>
+                            </div>
 
-                      {/* Mini métricas */}
-                      <div className="grid grid-cols-3 gap-3 mb-4 relative z-10">
-                        <motion.div
-                          className={`${colors.bgTertiary} border ${colors.border} rounded-lg p-3`}
-                          whileHover={{ scale: 1.05 }}
-                        >
-                          <p className={`text-xs ${colors.textSecondary} mb-1`}>Schedule Var.</p>
-                          <p className={`text-lg font-bold ${colors.textPrimary}`}>N/A</p>
-                        </motion.div>
+                            {/* Mini métricas */}
+                            <div className="grid grid-cols-3 gap-3 mb-4 relative z-10">
+                              <motion.div className={`${colors.bgTertiary} border ${colors.border} rounded-lg p-3`} whileHover={{ scale: 1.05 }}>
+                                <p className={`text-xs ${colors.textSecondary} mb-1`}>Schedule Var.</p>
+                                <p className={`text-lg font-bold ${sv !== undefined ? (sv >= 0 ? 'text-green-500' : 'text-[#FF3B30]') : colors.textPrimary}`}>
+                                  {sv !== undefined ? `${sv > 0 ? '+' : ''}${sv}%` : '—'}
+                                </p>
+                              </motion.div>
 
-                        <motion.div
-                          className={`${colors.bgTertiary} border ${colors.border} rounded-lg p-3`}
-                          whileHover={{ scale: 1.05 }}
-                        >
-                          <p className={`text-xs ${colors.textSecondary} mb-1`}>SPI</p>
-                          <p className={`text-lg font-bold ${colors.textPrimary}`}>N/A</p>
-                        </motion.div>
+                              <motion.div className={`${colors.bgTertiary} border ${colors.border} rounded-lg p-3`} whileHover={{ scale: 1.05 }}>
+                                <p className={`text-xs ${colors.textSecondary} mb-1`}>SPI</p>
+                                <p className={`text-lg font-bold ${spi !== undefined ? (spi >= 1 ? 'text-green-500' : spi >= 0.8 ? 'text-yellow-500' : 'text-[#FF3B30]') : colors.textPrimary}`}>
+                                  {spi !== undefined ? spi : '—'}
+                                </p>
+                              </motion.div>
 
-                        <motion.div
-                          className={`${colors.bgTertiary} border ${colors.border} rounded-lg p-3`}
-                          whileHover={{ scale: 1.05 }}
-                        >
-                          <p className={`text-xs ${colors.textSecondary} mb-1`}>Hitos ⏰</p>
-                          <p className={`text-lg font-bold ${colors.textPrimary}`}>N/A</p>
-                        </motion.div>
-                      </div>
+                              <motion.div className={`${colors.bgTertiary} border ${colors.border} rounded-lg p-3`} whileHover={{ scale: 1.05 }}>
+                                <p className={`text-xs ${colors.textSecondary} mb-1`}>Hitos ⏰</p>
+                                <p className={`text-lg font-bold ${milestones !== undefined ? (milestones === 0 ? 'text-green-500' : 'text-[#FF3B30]') : colors.textPrimary}`}>
+                                  {milestones !== undefined ? milestones : '—'}
+                                </p>
+                              </motion.div>
+                            </div>
+                          </>
+                        );
+                      })()}
 
                       {/* Footer */}
                       <div className={`flex items-center justify-between pt-4 border-t ${colors.border} relative z-10`}>
@@ -719,18 +840,34 @@ export function Projects() {
                               <p className={`text-sm ${colors.textSecondary}`}>{project.pm?.fullName || 'Sin PM'}</p>
                             </td>
                             <td className="p-4 text-center">
-                              <span className={`text-sm ${colors.textPrimary}`}>N/A</span>
+                              <div className="flex items-center justify-center gap-2">
+                                <div className={`w-16 h-1.5 ${colors.bgTertiary} rounded-full overflow-hidden`}>
+                                  <div className="h-full rounded-full" style={{ width: `${project.analytics?.kpis.progress ?? 0}%`, backgroundColor: colors.accent }} />
+                                </div>
+                                <span className={`text-sm font-medium ${colors.textPrimary}`}>
+                                  {project.analytics ? `${project.analytics.kpis.progress}%` : '—'}
+                                </span>
+                              </div>
                             </td>
                             <td className="p-4 text-center">
-                              <span className={`text-sm ${colors.textPrimary}`}>N/A</span>
+                              <span className={`text-sm font-medium ${project.analytics ? (project.analytics.kpis.spi >= 1 ? 'text-green-500' : project.analytics.kpis.spi >= 0.8 ? 'text-yellow-500' : 'text-[#FF3B30]') : colors.textSecondary}`}>
+                                {project.analytics ? project.analytics.kpis.spi : '—'}
+                              </span>
                             </td>
                             <td className="p-4 text-center">
-                              <span className={`text-sm ${colors.textPrimary}`}>N/A</span>
+                              <span className={`text-sm font-medium ${project.analytics ? (project.analytics.kpis.delayedMilestones === 0 ? 'text-green-500' : 'text-[#FF3B30]') : colors.textSecondary}`}>
+                                {project.analytics ? project.analytics.kpis.delayedMilestones : '—'}
+                              </span>
                             </td>
                             <td className="p-4 text-center">
-                              <Badge className={`text-xs border ${getRiskColor(project.riskLevel)}`}>
-                                {project.riskLevel}
-                              </Badge>
+                              {(() => {
+                                const effectiveRisk = project.analytics?.kpis.risk ?? project.riskLevel;
+                                return (
+                                  <Badge className={`text-xs border ${getRiskColor(effectiveRisk)}`}>
+                                    {effectiveRisk}
+                                  </Badge>
+                                );
+                              })()}
                             </td>
                             <td className="p-4 text-center">
                               <Badge className={`text-xs border ${getStatusColor(project.status)}`}>
@@ -799,7 +936,7 @@ export function Projects() {
                         <h3 className={`text-sm font-semibold ${colors.textPrimary}`}>Hitos Críticos</h3>
                       </div>
                       <p className="text-2xl font-bold text-orange-500 mb-2">{delayedMilestonesProjects.length}</p>
-                      <p className={`text-xs ${colors.textSecondary} mb-3`}>proyectos con +3 hitos retrasados</p>
+                      <p className={`text-xs ${colors.textSecondary} mb-3`}>proyectos con hitos retrasados</p>
                       <div className="space-y-2">
                         {delayedMilestonesProjects.slice(0, 2).map((project, i) => (
                           <Link key={project.id} to={`/project/${project.id}`}>
@@ -1078,11 +1215,13 @@ export function Projects() {
                   </motion.button>
                 </div>
 
-                <form className="p-6 space-y-6">
+                <form className="p-6 space-y-5" onSubmit={handleCreateUserSubmit}>
                   <div>
                     <label className={`block text-sm font-medium ${colors.textPrimary} mb-2`}>Nombre Completo *</label>
                     <input
                       type="text"
+                      value={userForm.fullName}
+                      onChange={(e) => setUserForm({ ...userForm, fullName: e.target.value })}
                       placeholder="Juan Pérez"
                       className={`w-full px-4 py-3 ${colors.bgTertiary} border ${colors.border} rounded-xl ${colors.textPrimary} placeholder:${colors.textSecondary} outline-none transition-all text-sm`}
                     />
@@ -1092,6 +1231,8 @@ export function Projects() {
                     <label className={`block text-sm font-medium ${colors.textPrimary} mb-2`}>Email Corporativo *</label>
                     <input
                       type="email"
+                      value={userForm.email}
+                      onChange={(e) => setUserForm({ ...userForm, email: e.target.value })}
                       placeholder="juan.perez@empresa.com"
                       className={`w-full px-4 py-3 ${colors.bgTertiary} border ${colors.border} rounded-xl ${colors.textPrimary} placeholder:${colors.textSecondary} outline-none transition-all text-sm`}
                     />
@@ -1100,36 +1241,48 @@ export function Projects() {
                   <div>
                     <label className={`block text-sm font-medium ${colors.textPrimary} mb-2`}>Rol en la Plataforma *</label>
                     <select
+                      value={userForm.role}
+                      onChange={(e) => setUserForm({ ...userForm, role: e.target.value })}
                       className={`w-full px-4 py-3 ${colors.bgTertiary} border ${colors.border} rounded-xl ${colors.textPrimary} outline-none transition-all text-sm`}
                     >
                       <option value="">Seleccionar rol...</option>
                       <option value="PM">Project Manager (PM)</option>
                       <option value="DEVELOPER">Developer</option>
+                      <option value="ADMIN">Admin</option>
                     </select>
-                    <p className={`text-xs ${colors.textSecondary} mt-2`}>
-                      PM: Acceso completo a proyectos asignados, métricas e IA<br />
-                      Developer: Acceso limitado a sus proyectos, gamificación personal
+                    <p className={`text-xs ${colors.textSecondary} mt-1.5`}>
+                      El usuario recibirá un OTP en su correo para configurar su contraseña.
                     </p>
                   </div>
 
                   <div>
-                    <label className={`block text-sm font-medium ${colors.textPrimary} mb-2`}>Departamento</label>
-                    <select
-                      className={`w-full px-4 py-3 ${colors.bgTertiary} border ${colors.border} rounded-xl ${colors.textPrimary} outline-none transition-all text-sm`}
-                    >
-                      <option value="">Seleccionar departamento...</option>
-                      <option value="engineering">Engineering</option>
-                      <option value="product">Product</option>
-                      <option value="design">Design</option>
-                      <option value="qa">QA</option>
-                      <option value="devops">DevOps</option>
-                    </select>
+                    <label className={`block text-sm font-medium ${colors.textPrimary} mb-2`}>Contraseña Temporal *</label>
+                    <div className="relative">
+                      <input
+                        type={showTempPassword ? 'text' : 'password'}
+                        value={userForm.temporaryPassword}
+                        onChange={(e) => setUserForm({ ...userForm, temporaryPassword: e.target.value })}
+                        placeholder="Mín. 8 caracteres"
+                        className={`w-full px-4 py-3 pr-11 ${colors.bgTertiary} border ${colors.border} rounded-xl ${colors.textPrimary} placeholder:${colors.textSecondary} outline-none transition-all text-sm`}
+                      />
+                      <button type="button" onClick={() => setShowTempPassword(!showTempPassword)}
+                        className={`absolute right-3 top-1/2 -translate-y-1/2 ${colors.textSecondary} hover:${colors.textPrimary}`}>
+                        {showTempPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                      </button>
+                    </div>
                   </div>
+
+                  {userError && (
+                    <div className="flex items-center gap-2 p-3 bg-[#E31837]/10 border border-[#E31837]/20 rounded-xl">
+                      <AlertTriangle className="w-4 h-4 text-[#E31837] flex-shrink-0" />
+                      <p className="text-sm text-[#E31837]">{userError}</p>
+                    </div>
+                  )}
 
                   <div className={`flex items-center justify-end gap-3 pt-4 border-t ${colors.border}`}>
                     <motion.button
                       type="button"
-                      onClick={() => setShowCreateUserModal(false)}
+                      onClick={() => { setShowCreateUserModal(false); setUserError(''); }}
                       className={`px-6 py-3 ${colors.bgTertiary} border ${colors.border} rounded-xl ${colors.textPrimary} ${colors.hover} transition-all text-sm font-medium`}
                       whileHover={{ scale: 1.02 }}
                       whileTap={{ scale: 0.98 }}
@@ -1138,12 +1291,13 @@ export function Projects() {
                     </motion.button>
                     <motion.button
                       type="submit"
-                      className="px-6 py-3 rounded-xl text-white transition-all text-sm font-medium"
+                      disabled={isCreatingUser}
+                      className="px-6 py-3 rounded-xl text-white transition-all text-sm font-medium disabled:opacity-60"
                       style={{ backgroundColor: colors.accent }}
-                      whileHover={{ scale: 1.02, backgroundColor: colors.accentHover }}
-                      whileTap={{ scale: 0.98 }}
+                      whileHover={{ scale: isCreatingUser ? 1 : 1.02, backgroundColor: colors.accentHover }}
+                      whileTap={{ scale: isCreatingUser ? 1 : 0.98 }}
                     >
-                      Crear Usuario
+                      {isCreatingUser ? 'Creando...' : 'Crear Usuario'}
                     </motion.button>
                   </div>
                 </form>

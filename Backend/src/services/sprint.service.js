@@ -29,7 +29,8 @@ async function validateProjectAccess({ projectId, userId, role }) {
       project.members.length > 0;
 
     if (!hasAccess) {
-      throw new Error("No tienes acceso a este proyecto");
+      // Return 404 to avoid confirming the project exists to unauthorized users
+      throw new Error("El proyecto no existe o no tienes acceso");
     }
 
     return project;
@@ -37,13 +38,13 @@ async function validateProjectAccess({ projectId, userId, role }) {
 
   if (role === "DEVELOPER" || role === "VIEWER") {
     if (project.members.length === 0) {
-      throw new Error("No tienes acceso a este proyecto");
+      throw new Error("El proyecto no existe o no tienes acceso");
     }
 
     return project;
   }
 
-  throw new Error("Rol no autorizado");
+  throw new Error("No tienes permisos para acceder a este recurso");
 }
 
 async function createSprint({

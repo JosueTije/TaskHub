@@ -11,6 +11,9 @@ const projectRoutes = require("./routes/project.routes");
 const sprintRoutes = require("./routes/sprint.routes");
 const ticketRoutes = require("./routes/ticket.routes");
 const analyticsRoutes = require("./routes/analytics.routes");
+const gamificationRoutes = require("./routes/gamification.routes");
+const notificationRoutes = require("./routes/notification.routes");
+const aiRoutes = require("./routes/ai.routes");
 
 dotenv.config();
 
@@ -43,5 +46,8 @@ app.use("/projects", projectRoutes);
 app.use("/sprints", sprintRoutes);
 app.use("/tickets", ticketRoutes);
 app.use("/analytics", analyticsRoutes);
+app.use("/gamification", gamificationRoutes);
+app.use("/notifications", notificationRoutes);
+app.use("/ai", aiRoutes);
 
 module.exports = app;

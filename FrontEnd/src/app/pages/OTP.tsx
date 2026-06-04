@@ -8,6 +8,7 @@ export function OTP() {
   const navigate = useNavigate();
   const {
     verifyOTP,
+    resendOTP,
     pendingEmail,
     isAuthenticated
   } = useAuth();
@@ -109,6 +110,23 @@ if (result.success) {
       setIsLoading(false);
     }
   };
+  const handleResend = async () => {
+    setIsResending(true);
+    setError('');
+    try {
+      const result = await resendOTP();
+      if (result.success) {
+        setResendTimer(60);
+        setOtp(['', '', '', '', '', '']);
+        inputRefs.current[0]?.focus();
+      } else {
+        setError(result.error ?? 'No se pudo reenviar el código');
+      }
+    } finally {
+      setIsResending(false);
+    }
+  };
+
   const maskEmail = (email: string) => {
     if (!email) return '';
     const [username, domain] = email.split('@');
@@ -210,8 +228,17 @@ if (result.success) {
 
           {}
           <div className="text-center">
-            <button disabled={resendTimer > 0 || isResending} className="text-sm text-[#8E8E93] hover:text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
-              {isResending ? 'Reenviando código...' : resendTimer > 0 ? `Reenviar código en ${resendTimer}s` : '¿No recibiste el código? Reenviar'}
+            <button
+              onClick={handleResend}
+              disabled={resendTimer > 0 || isResending}
+              className="text-sm text-[#8E8E93] hover:text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed inline-flex items-center gap-2"
+            >
+              {isResending && <Loader2 className="w-3 h-3 animate-spin" />}
+              {isResending
+                ? 'Reenviando código...'
+                : resendTimer > 0
+                ? `Reenviar código en ${resendTimer}s`
+                : '¿No recibiste el código? Reenviar'}
             </button>
           </div>
         </motion.div>

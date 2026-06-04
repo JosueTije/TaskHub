@@ -26,6 +26,7 @@ model User {
   assignedTickets    Ticket[]        @relation("AssignedTickets")
   createdTickets     Ticket[]        @relation("CreatedTickets")
   otps               UserOtp[]
+  notifications      Notification[]
 }
 
 model UserOtp {
@@ -148,6 +149,23 @@ model Ticket {
   @@index([startDate])
   @@index([dueDate])
   @@index([completedAt])
+}
+
+model Notification {
+  id          String   @id @default(uuid())
+  userId      String
+  type        String
+  title       String
+  description String
+  projectName String?
+  read        Boolean  @default(false)
+  createdAt   DateTime @default(now())
+
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([userId, read])
+  @@index([createdAt])
 }
 
 enum UserRole {

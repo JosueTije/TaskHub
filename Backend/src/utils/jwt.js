@@ -14,6 +14,12 @@ function signOtpSessionToken(payload) {
   });
 }
 
+function signPasswordResetToken(payload) {
+  return jwt.sign(payload, process.env.JWT_SECRET, {
+    expiresIn: "1h",
+  });
+}
+
 function verifyToken(token) {
   try {
     return jwt.verify(token, process.env.JWT_SECRET);
@@ -32,5 +38,6 @@ function verifyToken(token) {
 module.exports = {
   signAccessToken,
   signOtpSessionToken,
+  signPasswordResetToken,
   verifyToken,
 };
