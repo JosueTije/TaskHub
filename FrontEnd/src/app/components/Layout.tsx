@@ -226,25 +226,13 @@ export function Layout() {
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.25 }}
         >
-          <Link to="/profile" className="block">
-            <motion.div
-              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-all ${colors.textMuted} ${colors.hoverText} ${colors.hover} ${isCollapsed ? 'justify-center' : ''}`}
-              whileHover={{ 
-                scale: 1.02,
-                x: isCollapsed ? 0 : 4
-              }}
-              whileTap={{ scale: 0.98 }}
-            >
-              <motion.div
-                className="w-8 h-8 rounded-full bg-gradient-to-br from-[#E31837] to-[#5F0229] flex items-center justify-center flex-shrink-0"
-                whileHover={{ rotate: [0, -5, 5, -5, 0] }}
-                transition={{ duration: 0.5 }}
-              >
+          <div className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm ${colors.textMuted} ${isCollapsed ? 'justify-center' : ''}`}>
+              <div className="w-8 h-8 rounded-full bg-gradient-to-br from-[#E31837] to-[#5F0229] flex items-center justify-center flex-shrink-0">
                 <UserIcon className="w-4 h-4 text-white" />
-              </motion.div>
+              </div>
               <AnimatePresence mode="wait">
                 {!isCollapsed && (
-                  <motion.div 
+                  <motion.div
                     className="flex-1 text-left overflow-hidden"
                     initial={{ opacity: 0, width: 0 }}
                     animate={{ opacity: 1, width: 'auto' }}
@@ -256,8 +244,7 @@ export function Layout() {
                   </motion.div>
                 )}
               </AnimatePresence>
-            </motion.div>
-          </Link>
+            </div>
         </motion.div>
 
 
@@ -442,28 +429,15 @@ export function Layout() {
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.25 }}
             >
-              <Link to="/profile" onClick={() => setIsMobileMenuOpen(false)} className="block">
-                <motion.div
-                  className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-all ${colors.textMuted} ${colors.hoverText} ${colors.hover}`}
-                  whileHover={{ 
-                    scale: 1.02,
-                    x: 4
-                  }}
-                  whileTap={{ scale: 0.98 }}
-                >
-                  <motion.div
-                    className="w-8 h-8 rounded-full bg-gradient-to-br from-[#E31837] to-[#5F0229] flex items-center justify-center flex-shrink-0"
-                    whileHover={{ rotate: [0, -5, 5, -5, 0] }}
-                    transition={{ duration: 0.5 }}
-                  >
+              <div className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm ${colors.textMuted}`}>
+                  <div className="w-8 h-8 rounded-full bg-gradient-to-br from-[#E31837] to-[#5F0229] flex items-center justify-center flex-shrink-0">
                     <UserIcon className="w-4 h-4 text-white" />
-                  </motion.div>
+                  </div>
                   <div className="flex-1 text-left overflow-hidden">
                     <p className={`text-sm font-medium ${colors.textPrimary} truncate`}>{user?.name}</p>
                     <p className={`text-xs ${colors.textSecondary} truncate`}>{user?.email}</p>
                   </div>
-                </motion.div>
-              </Link>
+                </div>
             </motion.div>
 
      

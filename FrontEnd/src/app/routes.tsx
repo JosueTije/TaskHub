@@ -19,7 +19,6 @@ import { Gamification } from "./pages/Gamification";
 import { ProjectGamification } from "./pages/ProjectGamification";
 import { Notifications } from "./pages/Notifications";
 import { UserManagement } from "./pages/UserManagement";
-import { UserProfile } from "./pages/UserProfile";
 
 export const router = createBrowserRouter([
   // Public routes (no authentication needed)
@@ -64,7 +63,6 @@ export const router = createBrowserRouter([
       { path: "gamification/project/:id", Component: ProjectGamification },
       { path: "notifications", Component: Notifications },
       { path: "user-management", Component: UserManagement },
-      { path: "profile", Component: UserProfile },
     ],
   },
   
