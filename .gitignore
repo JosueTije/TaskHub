@@ -7,4 +7,6 @@ build/
 FrontEnd/node_modules/
 src/generated/prisma/
 Backend/.env
+Backend/*.pem
+FrontEnd/.env.local
 .DS_Store

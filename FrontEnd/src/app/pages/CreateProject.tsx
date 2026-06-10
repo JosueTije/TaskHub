@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Header } from '../components/Header';
 import { Button } from '../components/Button';
+import { toast } from 'sonner';
 import { Plus, X, Calendar, Users, Loader2, AlertCircle } from 'lucide-react';
 import { useNavigate } from 'react-router';
 import { authFetch } from '../../services/api';
@@ -181,6 +182,11 @@ export function CreateProject() {
         return;
       }
 
+      if (new Date(projectForm.targetEndDate) < new Date(projectForm.startDate)) {
+        setError('La fecha de fin no puede ser anterior a la fecha de inicio');
+        return;
+      }
+
       setIsSubmitting(true);
 
       const payload = {
@@ -200,7 +206,7 @@ export function CreateProject() {
         body: JSON.stringify(payload),
       });
 
-      alert('Proyecto creado correctamente');
+      toast.success('Proyecto creado correctamente');
       navigate(`/project/${data.project.id}`);
     } catch (err: any) {
       setError(err.message || 'No se pudo crear el proyecto');
@@ -300,7 +306,7 @@ export function CreateProject() {
                   onChange={(e) => setProjectForm({ ...projectForm, pmId: e.target.value })}
                   className="w-full px-4 py-2.5 bg-[#0F0F0F] border border-white/10 rounded-lg text-white focus:border-[#FF3B30] focus:ring-1 focus:ring-[#FF3B30] outline-none transition-all"
                 >
-                  <option value="">Seleccionar PM</option>
+                  <option value="">Sin PM asignado</option>
                   {pmOptions.map((user) => (
                     <option key={user.id} value={user.id}>
                       {user.fullName} ({user.role})
@@ -309,10 +315,9 @@ export function CreateProject() {
                 </select>
               </div>
 
-
               <div>
                 <label className="block text-sm font-medium text-[#8E8E93] mb-2">
-                  Presupuesto
+                  Presupuesto (USD)
                 </label>
                 <input
                   type="number"
@@ -322,6 +327,22 @@ export function CreateProject() {
                   placeholder="50000"
                   className="w-full px-4 py-2.5 bg-[#0F0F0F] border border-white/10 rounded-lg text-white placeholder-[#8E8E93] focus:border-[#FF3B30] focus:ring-1 focus:ring-[#FF3B30] outline-none transition-all"
                 />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-[#8E8E93] mb-2">
+                  Nivel de Riesgo
+                </label>
+                <select
+                  value={projectForm.riskLevel}
+                  onChange={(e) => setProjectForm({ ...projectForm, riskLevel: e.target.value })}
+                  className="w-full px-4 py-2.5 bg-[#0F0F0F] border border-white/10 rounded-lg text-white focus:border-[#FF3B30] focus:ring-1 focus:ring-[#FF3B30] outline-none transition-all"
+                >
+                  <option value="LOW">Bajo</option>
+                  <option value="MEDIUM">Medio</option>
+                  <option value="HIGH">Alto</option>
+                  <option value="CRITICAL">Crítico</option>
+                </select>
               </div>
             </div>
           </div>

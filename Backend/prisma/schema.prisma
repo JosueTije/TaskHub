@@ -26,6 +26,7 @@ model User {
   assignedTickets    Ticket[]        @relation("AssignedTickets")
   createdTickets     Ticket[]        @relation("CreatedTickets")
   otps               UserOtp[]
+  notifications      Notification[]
 }
 
 model UserOtp {
@@ -59,6 +60,9 @@ model Project {
   createdAt     DateTime        @default(now())
   updatedAt     DateTime        @updatedAt
   archivedAt    DateTime?
+
+  githubRepo       String?
+  githubRepoUrl    String?
 
   createdBy     User            @relation("CreatedProjects", fields: [createdById], references: [id])
   pm            User?           @relation("ManagedProjects", fields: [pmId], references: [id])
@@ -96,6 +100,8 @@ model Sprint {
   createdAt   DateTime     @default(now())
   updatedAt   DateTime     @updatedAt
 
+  githubBranch     String?
+
   project     Project      @relation(fields: [projectId], references: [id], onDelete: Cascade)
   tickets     Ticket[]
 
@@ -129,6 +135,13 @@ model Ticket {
   estimatedHours Float?
   actualHours    Float?
 
+  githubBranch     String?
+  githubPrNumber   Int?
+  githubPrUrl      String?
+  githubPrStatus   String?
+
+  embedding      Unsupported("vector(768)")?
+
   createdAt      DateTime      @default(now())
   updatedAt      DateTime      @updatedAt
 
@@ -148,6 +161,57 @@ model Ticket {
   @@index([startDate])
   @@index([dueDate])
   @@index([completedAt])
+}
+
+model GamificationEvent {
+  id           String   @id @default(uuid())
+  ticketId     String   @unique
+  userId       String
+  projectId    String
+  points       Int
+  priority     String
+  storyPoints  Int?
+  estimatedHours Float?
+  actualHours  Float?
+  precision    Boolean
+  createdAt    DateTime @default(now())
+
+  @@index([userId])
+  @@index([projectId])
+}
+
+model ActivityLog {
+  id          String   @id @default(uuid())
+  projectId   String
+  userId      String
+  userFullName String
+  entityType  String
+  entityId    String
+  entityTitle String?
+  action      String
+  metadata    Json?
+  createdAt   DateTime @default(now())
+
+  @@index([projectId])
+  @@index([userId])
+  @@index([createdAt])
+}
+
+model Notification {
+  id          String   @id @default(uuid())
+  userId      String
+  type        String
+  title       String
+  description String
+  projectName String?
+  read        Boolean  @default(false)
+  createdAt   DateTime @default(now())
+
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([userId, read])
+  @@index([createdAt])
 }
 
 enum UserRole {

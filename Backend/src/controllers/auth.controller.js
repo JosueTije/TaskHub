@@ -2,6 +2,9 @@ const {
   login,
   verifyFirstAccessOtp,
   setNewPassword,
+  forgotPassword,
+  resetPasswordWithToken,
+  resendOtp,
 } = require("../services/auth.service");
 
 async function loginController(req, res) {
@@ -18,8 +21,8 @@ async function loginController(req, res) {
 
 res.cookie("token", result.accessToken, {
   httpOnly: true,
-  secure: true,
-  sameSite: "none",
+  secure: process.env.NODE_ENV === "production",
+  sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
 });
 
     return res.status(200).json(result);
@@ -93,9 +96,50 @@ res.clearCookie("token", {
   }
 }
 
+async function forgotPasswordController(req, res) {
+  try {
+    const { email } = req.body;
+    if (!email) return res.status(400).json({ message: "email es obligatorio" });
+    // Always returns 200 — don't leak whether email exists
+    await forgotPassword({ email }).catch(() => {});
+    return res.status(200).json({ message: "Si el correo existe, recibirás un enlace de recuperación" });
+  } catch (error) {
+    return res.status(500).json({ message: "Error interno" });
+  }
+}
+
+async function resetPasswordController(req, res) {
+  try {
+    const { token, newPassword } = req.body;
+    if (!token || !newPassword) {
+      return res.status(400).json({ message: "token y newPassword son obligatorios" });
+    }
+    const result = await resetPasswordWithToken({ token, newPassword });
+    return res.status(200).json(result);
+  } catch (error) {
+    return res.status(400).json({ message: error.message || "Error al restablecer contraseña" });
+  }
+}
+
+async function resendOtpController(req, res) {
+  try {
+    const { otpToken } = req.body;
+    if (!otpToken) {
+      return res.status(400).json({ message: "otpToken es obligatorio" });
+    }
+    await resendOtp({ otpToken });
+    return res.status(200).json({ message: "Código reenviado correctamente" });
+  } catch (error) {
+    return res.status(400).json({ message: error.message || "Error al reenviar el código" });
+  }
+}
+
 module.exports = {
   loginController,
   verifyOtpController,
   setNewPasswordController,
   logoutController,
+  forgotPasswordController,
+  resetPasswordController,
+  resendOtpController,
 };

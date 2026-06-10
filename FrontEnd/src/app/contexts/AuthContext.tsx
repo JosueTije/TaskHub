@@ -1,4 +1,5 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import { authFetch } from '../../services/api';
 
 export type UserRole = 'ADMIN' | 'PM' | 'DEVELOPER';
 
@@ -31,6 +32,7 @@ interface AuthContextType {
   resendOTP: () => Promise<{ success: boolean; error?: string }>;
   pendingEmail: string | null;
   isAuthenticated: boolean;
+  isLoading: boolean;
   theme: 'dark' | 'light';
   setTheme: (theme: 'dark' | 'light') => void;
   toggleTheme: () => void;
@@ -38,54 +40,12 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-const DEMO_USERS: (User & { password: string })[] = [
-  {
-    id: '1',
-    email: 'admin@taskhub.com',
-    password: 'Admin123!',
-    name: 'Admin TaskHub',
-    role: 'ADMIN',
-    avatar: '👨‍💼',
-    needsPasswordReset: false,
-    isActive: true,
-  },
-  {
-    id: '2',
-    email: 'pm@taskhub.com',
-    password: 'PM123!',
-    name: 'Project Manager',
-    role: 'PM',
-    avatar: '👔',
-    needsPasswordReset: false,
-    isActive: true,
-  },
-  {
-    id: '3',
-    email: 'dev@taskhub.com',
-    password: 'Dev123!',
-    name: 'Sofia Torres',
-    role: 'DEVELOPER',
-    avatar: '👩‍💻',
-    needsPasswordReset: false,
-    isActive: true,
-  },
-  {
-    id: '4',
-    email: 'carlos@taskhub.com',
-    password: 'Default123!',
-    name: 'Carlos Mendoza',
-    role: 'DEVELOPER',
-    avatar: '👨‍💻',
-    needsPasswordReset: true,
-    isActive: true,
-  },
-];
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
   const [theme, setTheme] = useState<'dark' | 'light'>('dark');
-  const [users, setUsers] = useState(DEMO_USERS);
   const [pendingEmail, setPendingEmail] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
     try {
@@ -116,6 +76,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       localStorage.removeItem('taskhub_pending_email');
       localStorage.removeItem('taskhub_otp_token');
       localStorage.removeItem('setupPasswordToken');
+    } finally {
+      setIsLoading(false);
     }
   }, []);
 
@@ -221,13 +183,24 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const resendOTP = async (): Promise<{ success: boolean; error?: string }> => {
-    await new Promise((resolve) => setTimeout(resolve, 1000));
-
-    if (!pendingEmail) {
-      return { success: false, error: 'No hay solicitud de OTP pendiente' };
+    const otpToken = localStorage.getItem('taskhub_otp_token');
+    if (!otpToken) {
+      return { success: false, error: 'No hay sesión OTP activa. Inicia sesión de nuevo.' };
     }
-
-    return { success: true };
+    try {
+      const res = await fetch(`${import.meta.env.VITE_API_URL}/auth/resend-otp`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ otpToken }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        return { success: false, error: data.message || 'No se pudo reenviar el código' };
+      }
+      return { success: true };
+    } catch {
+      return { success: false, error: 'Error de conexión. Intenta de nuevo.' };
+    }
   };
 
   const logout = async () => {
@@ -251,15 +224,20 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const resetPassword = async (email: string): Promise<{ success: boolean; error?: string }> => {
-    await new Promise((resolve) => setTimeout(resolve, 1000));
-
-    const foundUser = users.find((u) => u.email === email);
-
-    if (!foundUser) {
-      return { success: false, error: 'No existe una cuenta con ese correo' };
+    try {
+      const res = await fetch(`${import.meta.env.VITE_API_URL}/auth/forgot-password`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email }),
+      });
+      if (!res.ok) {
+        const data = await res.json();
+        return { success: false, error: data.message || 'Error al enviar el enlace' };
+      }
+      return { success: true };
+    } catch {
+      return { success: false, error: 'Error de conexión. Intenta de nuevo.' };
     }
-
-    return { success: true };
   };
 
   const changePassword = async (
@@ -326,6 +304,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         resendOTP,
         pendingEmail,
         isAuthenticated: !!user,
+        isLoading,
         theme,
         setTheme,
         toggleTheme,
@@ -347,44 +326,118 @@ export const useAuth = () => {
 };
 
 export const useUsers = () => {
-  const [users, setUsers] = useState(DEMO_USERS);
+  const [users, setUsers] = useState<User[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [page, setPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const [total, setTotal] = useState(0);
+  const [search, setSearch] = useState('');
+  const LIMIT = 15;
 
-  const createUser = (userData: Omit<User & { password: string }, 'id'>) => {
-    const newUser = {
-      ...userData,
-      id: Date.now().toString(),
-      needsPasswordReset: true,
-    };
+  const fetchUsers = useCallback(async (p = 1, q = '') => {
+    setLoading(true);
+    setError(null);
+    try {
+      const params = new URLSearchParams({
+        page: String(p),
+        limit: String(LIMIT),
+        ...(q.trim() ? { search: q.trim() } : {}),
+      });
+      const data = await authFetch<{ users: any[]; total: number; page: number; totalPages: number }>(`/users?${params}`);
+      setUsers(
+        data.users.map((u) => ({
+          id: u.id,
+          email: u.email,
+          name: u.fullName,
+          role: u.role as UserRole,
+          avatar: u.avatarUrl ?? '👤',
+          needsPasswordReset: u.status === 'PENDING_SETUP',
+          isActive: u.status === 'ACTIVE',
+        }))
+      );
+      setTotal(data.total);
+      setTotalPages(data.totalPages);
+      setPage(data.page);
+    } catch (err: any) {
+      console.error('[useUsers] Error al cargar usuarios:', err);
+      setError(err?.message ?? 'No se pudieron cargar los usuarios');
+      setUsers([]);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
 
-    setUsers((prev) => [...prev, newUser]);
-    return newUser;
+  useEffect(() => {
+    fetchUsers(1, search);
+  }, [fetchUsers]);
+
+  const goToPage = useCallback((p: number) => {
+    fetchUsers(p, search);
+  }, [fetchUsers, search]);
+
+  const handleSearch = useCallback((q: string) => {
+    setSearch(q);
+    fetchUsers(1, q);
+  }, [fetchUsers]);
+
+  const createUser = (userData: User) => {
+    setUsers((prev) => [...prev, userData]);
   };
 
-  const updateUser = (id: string, updates: Partial<User>) => {
-    setUsers((prev) => prev.map((u) => (u.id === id ? { ...u, ...updates } : u)));
+  const updateUser = async (id: string, updates: { name?: string; role?: UserRole }) => {
+    const data = await authFetch<{ user: any }>(`/users/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ fullName: updates.name, role: updates.role }),
+    });
+    setUsers((prev) =>
+      prev.map((u) =>
+        u.id === id
+          ? { ...u, name: data.user.fullName, role: data.user.role as UserRole }
+          : u
+      )
+    );
   };
 
-  const deleteUser = (id: string) => {
+  const deleteUser = async (id: string) => {
+    await authFetch(`/users/${id}`, { method: 'DELETE' });
     setUsers((prev) => prev.filter((u) => u.id !== id));
   };
 
-  const resetUserPassword = (id: string) => {
-    const newPassword = 'Default123!';
-
+  const toggleUserStatus = async (id: string, status: 'ACTIVE' | 'INACTIVE') => {
+    const data = await authFetch<{ user: any }>(`/users/${id}/status`, {
+      method: 'PATCH',
+      body: JSON.stringify({ status }),
+    });
     setUsers((prev) =>
       prev.map((u) =>
-        u.id === id ? { ...u, password: newPassword, needsPasswordReset: true } : u
+        u.id === id ? { ...u, isActive: data.user.status === 'ACTIVE' } : u
       )
     );
+  };
 
-    return newPassword;
+  const resetUserPassword = async (id: string): Promise<string> => {
+    const data = await authFetch<{ temporaryPassword: string }>(`/users/${id}/reset-password`, {
+      method: 'POST',
+    });
+    return data.temporaryPassword;
   };
 
   return {
-    users: users.map(({ password, ...user }) => user),
+    users,
+    loading,
+    error,
+    page,
+    totalPages,
+    total,
+    search,
+    goToPage,
+    handleSearch,
     createUser,
     updateUser,
     deleteUser,
+    toggleUserStatus,
     resetUserPassword,
+    refetch: () => fetchUsers(page, search),
   };
 };

@@ -29,7 +29,8 @@ async function validateProjectAccess({ projectId, userId, role }) {
       project.members.length > 0;
 
     if (!hasAccess) {
-      throw new Error("No tienes acceso a este proyecto");
+      // Return 404 to avoid confirming the project exists to unauthorized users
+      throw new Error("El proyecto no existe o no tienes acceso");
     }
 
     return project;
@@ -37,13 +38,13 @@ async function validateProjectAccess({ projectId, userId, role }) {
 
   if (role === "DEVELOPER" || role === "VIEWER") {
     if (project.members.length === 0) {
-      throw new Error("No tienes acceso a este proyecto");
+      throw new Error("El proyecto no existe o no tienes acceso");
     }
 
     return project;
   }
 
-  throw new Error("Rol no autorizado");
+  throw new Error("No tienes permisos para acceder a este recurso");
 }
 
 async function createSprint({
@@ -395,11 +396,77 @@ async function deleteSprint({ sprintId, userId, role }) {
   };
 }
 
+async function closeSprint({ sprintId, incompleteAction, destinationSprintId, userId, role }) {
+  if (!["ADMIN", "PM"].includes(role)) {
+    throw new Error("No tienes permisos para cerrar sprints");
+  }
+
+  if (!["move", "cancel"].includes(incompleteAction)) {
+    throw new Error("incompleteAction debe ser 'move' o 'cancel'");
+  }
+
+  if (incompleteAction === "move" && !destinationSprintId) {
+    throw new Error("destinationSprintId es obligatorio cuando incompleteAction es 'move'");
+  }
+
+  const sprint = await prisma.sprint.findUnique({
+    where: { id: sprintId },
+    include: { tickets: true },
+  });
+
+  if (!sprint) throw new Error("El sprint no existe");
+
+  if (sprint.status === "COMPLETED" || sprint.status === "CANCELLED") {
+    throw new Error("El sprint ya está cerrado");
+  }
+
+  await validateProjectAccess({ projectId: sprint.projectId, userId, role });
+
+  const incompleteTickets = sprint.tickets.filter(
+    (t) => !["DONE", "CANCELLED"].includes(t.status)
+  );
+
+  if (incompleteAction === "move" && destinationSprintId) {
+    const destination = await prisma.sprint.findUnique({ where: { id: destinationSprintId } });
+    if (!destination || destination.projectId !== sprint.projectId) {
+      throw new Error("El sprint destino no existe en este proyecto");
+    }
+    if (destination.status === "COMPLETED" || destination.status === "CANCELLED") {
+      throw new Error("No se puede mover tickets a un sprint cerrado");
+    }
+    if (incompleteTickets.length > 0) {
+      await prisma.ticket.updateMany({
+        where: { id: { in: incompleteTickets.map((t) => t.id) } },
+        data: { sprintId: destinationSprintId, status: "TODO", startedAt: null, completedAt: null },
+      });
+    }
+  } else {
+    if (incompleteTickets.length > 0) {
+      await prisma.ticket.updateMany({
+        where: { id: { in: incompleteTickets.map((t) => t.id) } },
+        data: { status: "CANCELLED" },
+      });
+    }
+  }
+
+  const closedSprint = await prisma.sprint.update({
+    where: { id: sprintId },
+    data: { status: "COMPLETED", completedAt: new Date() },
+  });
+
+  return {
+    sprint: closedSprint,
+    migratedTickets: incompleteAction === "move" ? incompleteTickets.length : 0,
+    cancelledTickets: incompleteAction === "cancel" ? incompleteTickets.length : 0,
+  };
+}
+
 module.exports = {
   createSprint,
   getSprintsByProject,
   getSprintById,
   updateSprint,
   updateSprintStatus,
+  closeSprint,
   deleteSprint,
 };

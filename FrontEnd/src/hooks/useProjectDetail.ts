@@ -2,7 +2,6 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { authFetch } from "../services/api";
-import { projects } from "../app/data/mockData";
 
 import type {
   BackendProject,
@@ -49,7 +48,6 @@ export function useProjectDetail(id?: string) {
   const [selectedDeveloperId, setSelectedDeveloperId] = useState("");
   const [loadingDevelopers, setLoadingDevelopers] = useState(false);
 
-  const mockProject = projects.find((p) => p.id === id) || projects[0];
   const backendProject = backendProjects.find((p) => p.id === id) || null;
 useEffect(() => {
   if (!id) return;
@@ -201,7 +199,7 @@ useEffect(() => {
   };
 
   const project = useMemo(() => {
-    if (!mockProject && !backendProject) return null;
+    if (!backendProject) return null;
 
     const kpis = dashboard?.kpis;
 
@@ -223,7 +221,7 @@ useEffect(() => {
         : [{ date: "Real", planned: 0, actual: 0 }],
     };
 
-    if (!mockProject && backendProject) {
+    if (backendProject) {
       return {
         id: backendProject.id,
         name: safeText(backendProject.name),
@@ -317,107 +315,8 @@ useEffect(() => {
       };
     }
 
-    return {
-      ...mockProject,
-
-      id: backendProject?.id ?? mockProject.id,
-      name: backendProject?.name ?? mockProject.name,
-      code: safeText(backendProject?.code),
-      description: safeText(backendProject?.description),
-
-      status: formatBackendStatus(backendProject?.status),
-      risk: analyticsValues.risk,
-
-      startDate: backendProject?.startDate ?? null,
-      targetEndDate: backendProject?.targetEndDate ?? null,
-      actualEndDate: backendProject?.actualEndDate ?? null,
-
-      startDateLabel: formatDateLabel(backendProject?.startDate),
-      targetEndDateLabel: formatDateLabel(backendProject?.targetEndDate),
-      actualEndDateLabel: formatDateLabel(backendProject?.actualEndDate),
-
-      budget: backendProject?.budget ?? null,
-      budgetLabel: formatMoneyLabel(backendProject?.budget),
-
-      pm: backendProject?.pm
-        ? {
-            name: backendProject.pm.fullName,
-            email: backendProject.pm.email,
-            role: backendProject.pm.role,
-          }
-        : {
-            name: "N/A",
-            email: "N/A",
-            role: "N/A",
-          },
-
-      createdBy: backendProject?.createdBy
-        ? {
-            name: backendProject.createdBy.fullName,
-            email: backendProject.createdBy.email,
-            role: backendProject.createdBy.role,
-          }
-        : {
-            name: "N/A",
-            email: "N/A",
-            role: "N/A",
-          },
-
-      pmName: backendProject?.pm?.fullName || "N/A",
-      pmEmail: backendProject?.pm?.email || "N/A",
-      createdByName: backendProject?.createdBy?.fullName || "N/A",
-      createdByEmail: backendProject?.createdBy?.email || "N/A",
-
-      members: backendProject?.members ?? [],
-
-      developers: backendProject?.members?.length
-        ? backendProject.members.map((m) => ({
-            name: m.fullName,
-            role: m.role,
-            email: m.email,
-            avatar: m.avatarUrl,
-            completedTickets: "N/A",
-            velocity: "N/A",
-            workload: "N/A",
-          }))
-        : [],
-
-      team: backendProject?.members?.length
-        ? mapTeamFromMembers(backendProject.members)
-        : Array.isArray(mockProject.team)
-        ? mockProject.team
-        : [],
-
-      teamMembersLabel: backendProject?.members?.length
-        ? backendProject.members.map((m) => m.fullName).join(", ")
-        : "N/A",
-
-      teamSize:
-        backendProject?.stats?.membersCount ?? mockProject.team?.length ?? 0,
-
-      stats: backendProject?.stats ?? {
-        membersCount: mockProject.team?.length ?? 0,
-        sprintsCount: 0,
-        ticketsCount: 0,
-      },
-
-      sprintsCountLabel: backendProject?.stats?.sprintsCount ?? "N/A",
-      ticketsCountLabel: backendProject?.stats?.ticketsCount ?? "N/A",
-
-      ...analyticsValues,
-
-      sprints: realSprints.map(mapBackendSprintToUi),
-      tickets: realTickets.map(mapBackendTicketToUi),
-
-      notifications: [],
-
-      closedDate: backendProject?.actualEndDate
-        ? new Date(backendProject.actualEndDate).toISOString().split("T")[0]
-        : "N/A",
-
-      closedBy: "N/A",
-    };
-  }, [mockProject, backendProject, realSprints, realTickets, dashboard]);
+    return null;
+  }, [backendProject, realSprints, realTickets, dashboard]);
 
   const handleCreateSprint = async (sprintData: {
     name: string;
@@ -586,7 +485,6 @@ useEffect(() => {
 
   return {
     project,
-    mockProject,
     backendProject,
     dashboard,
     loadDashboard,

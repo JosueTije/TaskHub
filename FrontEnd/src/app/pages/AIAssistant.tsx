@@ -1,624 +1,541 @@
-import { useState, useRef, useEffect } from 'react';
-import { AlertTriangle, FileText, BarChart3, TrendingUp, Users, Sparkles, Send, Loader, MessageSquare, Download, Zap, CheckCircle2, ArrowRight, Paperclip } from 'lucide-react';
-import { LineChart, Line, XAxis, YAxis, ResponsiveContainer } from 'recharts';
+import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
+import ReactMarkdown from 'react-markdown';
+import { Sparkles, Send, Loader2, User, Bot, AlertTriangle, BarChart3, TrendingUp, Users, FileText, Trash2, Search, ChevronDown, FileDown, ShieldAlert, X } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
+import { Header } from '../components/Header';
+import { RiskAnalysisModal } from '../components/RiskAnalysisModal';
+import { authFetch } from '../../services/api';
 import { useAuth } from '../contexts/AuthContext';
-import { Button } from '../components/Button';
-const miniChartData = [{
-  value: 65
-}, {
-  value: 70
-}, {
-  value: 68
-}, {
-  value: 75
-}, {
-  value: 72
-}, {
-  value: 68
-}];
-const quickSuggestions = [{
-  id: 1,
-  icon: AlertTriangle,
-  color: '#FF3B30',
-  question: '¿Cuál es el proyecto con mayor riesgo?'
-}, {
-  id: 2,
-  icon: FileText,
-  color: '#007AFF',
-  question: 'Dame un resumen ejecutivo del portafolio.'
-}, {
-  id: 3,
-  icon: BarChart3,
-  color: '#FF9500',
-  question: '¿Qué sprint tiene más retrasos?'
-}, {
-  id: 4,
-  icon: TrendingUp,
-  color: '#34C759',
-  question: 'Simula mover el milestone 3 tres días.'
-}, {
-  id: 5,
-  icon: Users,
-  color: '#AF52DE',
-  question: '¿Qué developer tiene mejor rendimiento este mes?'
-}];
-const ragContext = {
-  activeProject: 'E-commerce Platform',
-  lastUpdate: '17 Feb 2026, 14:32',
-  dataSources: [{
-    name: 'Milestones',
-    status: 'active',
-    records: 12
-  }, {
-    name: 'Sprints',
-    status: 'active',
-    records: 8
-  }, {
-    name: 'KPIs',
-    status: 'active',
-    records: 45
-  }, {
-    name: 'Riesgo IA',
-    status: 'active',
-    records: 3
-  }, {
-    name: 'Team Performance',
-    status: 'active',
-    records: 24
-  }]
-};
-type Message = {
+import { useExecutiveSummary } from '../../hooks/useExecutiveSummary';
+import { useRiskAnalysis } from '../../hooks/useRiskAnalysis';
+
+// ─── Types ────────────────────────────────────────────────────────────────────
+
+interface Project { id: string; name: string; status: string; riskLevel?: string; }
+
+interface Message {
   id: string;
-  type: 'user' | 'ai';
+  role: 'user' | 'assistant';
   content: string;
-  timestamp: string;
-  metadata?: {
-    kpis?: Array<{
-      label: string;
-      value: string;
-      color: string;
-    }>;
-    chart?: boolean;
-    recommendations?: string[];
-    actions?: Array<{
-      label: string;
-      icon: any;
-    }>;
-  };
-};
-const initialMessages: Message[] = [{
-  id: '1',
-  type: 'ai',
-  content: '¡Hola! Soy tu Asistente Inteligente de TaskHub. Tengo acceso en tiempo real a todos los datos de tus proyectos, sprints, métricas y equipo. ¿En qué puedo ayudarte hoy?',
-  timestamp: '14:28'
-}, {
-  id: '2',
-  type: 'user',
-  content: '¿Cuál es el proyecto con mayor riesgo?',
-  timestamp: '14:29'
-}, {
-  id: '3',
-  type: 'ai',
-  content: 'Basándome en el análisis de datos actuales, el proyecto **E-commerce Platform** presenta el mayor nivel de riesgo:',
-  timestamp: '14:29',
-  metadata: {
-    kpis: [{
-      label: 'SPI',
-      value: '0.92',
-      color: '#FF3B30'
-    }, {
-      label: 'Hitos retrasados',
-      value: '3',
-      color: '#FF3B30'
-    }, {
-      label: 'Schedule Variance',
-      value: '-8%',
-      color: '#FF3B30'
-    }, {
-      label: 'Nivel de Riesgo',
-      value: 'Alto',
-      color: '#FF3B30'
-    }],
-    chart: true,
-    recommendations: ['Aumentar recursos en un 20% para recuperar el cronograma', 'Replantear el alcance del sprint actual', 'Realizar reunión de emergencia con stakeholders', 'Considerar replanificación de milestones críticos'],
-    actions: [{
-      label: 'Ver proyecto',
-      icon: ArrowRight
-    }, {
-      label: 'Generar plan de recuperación',
-      icon: FileText
-    }]
+  streaming?: boolean;
+}
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+function makeId() {
+  return Math.random().toString(36).slice(2);
+}
+
+function storageKey(projectId: string) {
+  return `ai-chat-${projectId || 'general'}`;
+}
+
+function loadHistory(projectId: string): Message[] {
+  try {
+    const raw = localStorage.getItem(storageKey(projectId));
+    return raw ? JSON.parse(raw) : [];
+  } catch {
+    return [];
   }
-}];
+}
+
+function saveHistory(projectId: string, messages: Message[]) {
+  try {
+    const toSave = messages.filter((m) => !m.streaming).slice(-20);
+    localStorage.setItem(storageKey(projectId), JSON.stringify(toSave));
+  } catch {
+    // localStorage full or unavailable
+  }
+}
+
+// ─── Dynamic suggestions ──────────────────────────────────────────────────────
+
+function getSuggestions(hasProject: boolean, hasActiveSprint: boolean) {
+  if (!hasProject) {
+    return [
+      { icon: FileText,    color: '#AF52DE', text: '¿Qué es la gestión ágil de proyectos?' },
+      { icon: BarChart3,   color: '#FF9F0A', text: '¿Cómo se calcula el SPI de un proyecto?' },
+      { icon: TrendingUp,  color: '#34C759', text: '¿Qué es un sprint retrospective?' },
+    ];
+  }
+  const base = [
+    { icon: TrendingUp,   color: '#34C759', text: '¿Cuál es el riesgo actual del proyecto?' },
+    { icon: Users,        color: '#007AFF', text: '¿Quién tiene más tickets asignados?' },
+    { icon: FileText,     color: '#AF52DE', text: 'Dame un resumen ejecutivo del proyecto.' },
+  ];
+  if (hasActiveSprint) {
+    base.unshift({ icon: BarChart3, color: '#FF9F0A', text: '¿Cómo va el progreso del sprint activo?' });
+    base.unshift({ icon: AlertTriangle, color: '#FF3B30', text: '¿Cuáles son los tickets bloqueados actualmente?' });
+  }
+  return base.slice(0, 5);
+}
+
+// ─── Main Component ───────────────────────────────────────────────────────────
+
 export function AIAssistant() {
-  const [messages, setMessages] = useState<Message[]>(initialMessages);
-  const [inputValue, setInputValue] = useState('');
-  const [isTyping, setIsTyping] = useState(false);
-  const [showSuggestions, setShowSuggestions] = useState(true);
-  const messagesEndRef = useRef<HTMLDivElement>(null);
-  const inputRef = useRef<HTMLInputElement>(null);
-  const {
-    theme
-  } = useAuth();
+  const { theme } = useAuth();
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [selectedId, setSelectedId] = useState('');
+  const [messages, setMessages] = useState<Message[]>([]);
+  const [input, setInput] = useState('');
+  const [streaming, setStreaming] = useState(false);
+  const [projectSearch, setProjectSearch] = useState('');
+  const [projectDropdownOpen, setProjectDropdownOpen] = useState(false);
+  const [hasActiveSprint, setHasActiveSprint] = useState(false);
+  const [riskModalOpen, setRiskModalOpen] = useState(false);
+  const bottomRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
+  const abortRef = useRef<AbortController | null>(null);
+  const initializedRef = useRef(false);
+
+  const summary = useExecutiveSummary(selectedId);
+  const risk = useRiskAnalysis(selectedId);
+
+  // Open risk modal automatically when analysis data arrives
+  useEffect(() => {
+    if (risk.data && !risk.isAnalyzing) setRiskModalOpen(true);
+  }, [risk.data, risk.isAnalyzing]);
+
   const colors = {
     bg: theme === 'dark' ? 'bg-[#0F0F0F]' : 'bg-[#F6F2EA]',
-    card: theme === 'dark' ? 'bg-[#1C1C1E]' : 'bg-[#E5DFD3]',
-    cardDarker: theme === 'dark' ? 'bg-[#0F0F0F]' : 'bg-[#D6CFC0]',
+    card: theme === 'dark' ? 'bg-[#1C1C1E]' : 'bg-white',
+    cardDark: theme === 'dark' ? 'bg-[#0F0F0F]' : 'bg-[#E5DFD3]',
     border: theme === 'dark' ? 'border-white/10' : 'border-[#4A453D]/10',
-    borderHover: theme === 'dark' ? 'border-white/20' : 'border-[#4A453D]/20',
     textPrimary: theme === 'dark' ? 'text-white' : 'text-[#29251D]',
     textMuted: theme === 'dark' ? 'text-[#8E8E93]' : 'text-[#4A453D]',
-    redPrimary: theme === 'dark' ? '#FF3B30' : '#5F0229',
-    redBg: theme === 'dark' ? 'bg-[#FF3B30]' : 'bg-[#5F0229]',
-    redBgSubtle: theme === 'dark' ? 'bg-[#FF3B30]/10' : 'bg-[#5F0229]/10',
-    redBorder: theme === 'dark' ? 'border-[#FF3B30]/20' : 'border-[#5F0229]/20',
-    redText: theme === 'dark' ? 'text-[#FF3B30]' : 'text-[#5F0229]'
+    input: theme === 'dark' ? 'bg-[#0F0F0F] text-white placeholder-[#8E8E93]' : 'bg-[#E5DFD3] text-[#29251D] placeholder-[#4A453D]',
+    userBubble: 'bg-[#FF3B30] text-white',
+    aiBubble: theme === 'dark'
+      ? 'bg-[#0F0F0F] border border-white/10 text-white'
+      : 'bg-[#E5DFD3] border border-[#4A453D]/10 text-[#29251D]',
+    dropdownBg: theme === 'dark' ? 'bg-[#1C1C1E] border-white/10' : 'bg-white border-[#4A453D]/10',
+    dropdownItem: theme === 'dark' ? 'hover:bg-white/5 text-white' : 'hover:bg-[#E5DFD3] text-[#29251D]',
   };
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({
-      behavior: 'smooth'
-    });
-  };
+
+  // Load projects
   useEffect(() => {
-    scrollToBottom();
-  }, [messages]);
-  const handleSendMessage = () => {
-    if (!inputValue.trim()) return;
-    const newUserMessage: Message = {
-      id: Date.now().toString(),
-      type: 'user',
-      content: inputValue,
-      timestamp: new Date().toLocaleTimeString('es-ES', {
-        hour: '2-digit',
-        minute: '2-digit'
+    authFetch<{ projects: Project[] }>('/projects')
+      .then((res) => {
+        const active = res.projects.filter((p) => p.status !== 'ARCHIVED');
+        setProjects(active);
+        if (active.length > 0 && !initializedRef.current) {
+          initializedRef.current = true;
+          const firstId = active[0].id;
+          setSelectedId(firstId);
+          setMessages(loadHistory(firstId));
+        }
       })
-    };
-    setMessages(prev => [...prev, newUserMessage]);
-    setInputValue('');
-    setShowSuggestions(false);
-    setIsTyping(true);
-    setTimeout(() => {
-      const aiResponse: Message = {
-        id: (Date.now() + 1).toString(),
-        type: 'ai',
-        content: 'He analizado los datos y encontré información relevante. Esta es una respuesta de ejemplo generada por el asistente inteligente basada en los datos del sistema.',
-        timestamp: new Date().toLocaleTimeString('es-ES', {
-          hour: '2-digit',
-          minute: '2-digit'
-        })
-      };
-      setMessages(prev => [...prev, aiResponse]);
-      setIsTyping(false);
-    }, 1500);
+      .catch(() => {});
+  }, []);
+
+  // Persist history on change
+  useEffect(() => {
+    if (messages.some((m) => !m.streaming)) {
+      saveHistory(selectedId, messages);
+    }
+  }, [messages, selectedId]);
+
+  // Auto-scroll
+  useEffect(() => {
+    bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [messages]);
+
+  const selectedProject = projects.find((p) => p.id === selectedId);
+
+  const suggestions = useMemo(
+    () => getSuggestions(!!selectedProject, hasActiveSprint),
+    [selectedProject, hasActiveSprint]
+  );
+
+  const sendMessage = useCallback(async (text: string) => {
+    const trimmed = text.trim().slice(0, 2000);
+    if (!trimmed || streaming) return;
+
+    const userMsg: Message = { id: makeId(), role: 'user', content: trimmed };
+    const assistantId = makeId();
+    const assistantMsg: Message = { id: assistantId, role: 'assistant', content: '', streaming: true };
+
+    setMessages((prev) => [...prev, userMsg, assistantMsg]);
+    setInput('');
+    setStreaming(true);
+
+    const history = messages
+      .filter((m) => !m.streaming)
+      .slice(-10)
+      .map((m) => ({ role: m.role, content: m.content }));
+
+    try {
+      const abort = new AbortController();
+      abortRef.current = abort;
+
+      const res = await fetch(`${import.meta.env.VITE_API_URL}/ai/chat`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message: trimmed, projectId: selectedId || null, history }),
+        signal: abort.signal,
+      });
+
+      if (!res.ok || !res.body) throw new Error('Error de conexión');
+
+      // Detect sprint info from first response to update suggestions
+      let sprintDetected = false;
+
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buf = '';
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buf += decoder.decode(value, { stream: true });
+        const lines = buf.split('\n');
+        buf = lines.pop() ?? '';
+
+        for (const line of lines) {
+          if (!line.startsWith('data: ')) continue;
+          const raw = line.slice(6);
+          if (raw === '[DONE]') break;
+
+          try {
+            const parsed = JSON.parse(raw);
+            if (parsed.error) {
+              setMessages((prev) =>
+                prev.map((m) =>
+                  m.id === assistantId
+                    ? { ...m, content: `⚠️ ${parsed.error}`, streaming: false }
+                    : m
+                )
+              );
+              return;
+            }
+            if (parsed.token) {
+              if (!sprintDetected && parsed.token.toLowerCase().includes('sprint')) {
+                sprintDetected = true;
+                setHasActiveSprint(true);
+              }
+              setMessages((prev) =>
+                prev.map((m) =>
+                  m.id === assistantId
+                    ? { ...m, content: m.content + parsed.token }
+                    : m
+                )
+              );
+            }
+          } catch {
+            // skip
+          }
+        }
+      }
+    } catch (err: any) {
+      if (err.name === 'AbortError') {
+        setMessages((prev) =>
+          prev.map((m) =>
+            m.id === assistantId ? { ...m, content: m.content + ' *(cancelado)*', streaming: false } : m
+          )
+        );
+        return;
+      }
+      setMessages((prev) =>
+        prev.map((m) =>
+          m.id === assistantId
+            ? { ...m, content: '⚠️ No se pudo conectar. El servicio de IA no está disponible.', streaming: false }
+            : m
+        )
+      );
+    } finally {
+      setMessages((prev) =>
+        prev.map((m) => (m.id === assistantId ? { ...m, streaming: false } : m))
+      );
+      setStreaming(false);
+      abortRef.current = null;
+      inputRef.current?.focus();
+    }
+  }, [messages, selectedId, streaming]);
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    sendMessage(input);
   };
-  const handleSuggestionClick = (question: string) => {
-    setInputValue(question);
-    inputRef.current?.focus();
-  };
-  const handleKeyPress = (e: React.KeyboardEvent) => {
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
-      handleSendMessage();
+      sendMessage(input);
     }
   };
-  return <div className={`min-h-screen ${colors.bg}`}>
-      {}
-      <div className="flex flex-col h-screen max-w-6xl mx-auto">
-        {}
-        <motion.div className={`border-b ${colors.border} ${colors.bg} p-6 md:p-8 flex-shrink-0`} initial={{
-        opacity: 0,
-        y: -20
-      }} animate={{
-        opacity: 1,
-        y: 0
-      }} transition={{
-        duration: 0.5
-      }}>
-          <div className="flex items-start justify-between">
-            <motion.div initial={{
-            opacity: 0,
-            x: -20
-          }} animate={{
-            opacity: 1,
-            x: 0
-          }} transition={{
-            delay: 0.2,
-            duration: 0.5
-          }}>
-              <div className="flex items-center gap-3 mb-2">
-                <motion.div className={`p-2 ${colors.redBgSubtle} rounded-lg`} whileHover={{
-                scale: 1.1,
-                rotate: [0, -10, 10, -10, 0]
-              }} transition={{
-                duration: 0.5
-              }}>
-                  <Sparkles className={`w-6 h-6 ${colors.redText}`} />
-                </motion.div>
-                <h1 className={`text-2xl md:text-3xl font-bold ${colors.textPrimary}`}>Asistente Inteligente</h1>
+
+  const clearChat = useCallback(() => {
+    if (streaming) abortRef.current?.abort();
+    setMessages([]);
+    setStreaming(false);
+    localStorage.removeItem(storageKey(selectedId));
+  }, [streaming, selectedId]);
+
+  const handleProjectChange = (id: string) => {
+    if (id === selectedId) return;
+    if (streaming) abortRef.current?.abort();
+    setStreaming(false);
+    setSelectedId(id);
+    setMessages(loadHistory(id));
+    setHasActiveSprint(false);
+    setRiskModalOpen(false);
+    risk.clear();
+  };
+
+  const allOptions = [
+    { id: '', name: 'Sin proyecto (general)' },
+    ...projects.map((p) => ({ id: p.id, name: p.name })),
+  ];
+  const filteredOptions = allOptions.filter((o) =>
+    o.name.toLowerCase().includes(projectSearch.toLowerCase())
+  );
+  const selectedLabel = selectedId ? (selectedProject?.name ?? '') : 'Sin proyecto (general)';
+
+  return (
+    <div className={`min-h-screen ${colors.bg} flex flex-col`}>
+      <Header title="AI Assistant" subtitle="Chat inteligente con contexto de tu proyecto" />
+
+      <div className="flex-1 flex flex-col max-w-4xl mx-auto w-full p-4 md:p-6 gap-4">
+
+        {/* Project selector + clear */}
+        <div className={`${colors.card} border ${colors.border} rounded-xl p-3 flex items-center gap-3 flex-wrap`}>
+          <Sparkles className="w-4 h-4 text-[#FF3B30] flex-shrink-0" />
+          <span className={`text-xs ${colors.textMuted} flex-shrink-0`}>Contexto:</span>
+
+          <div className="relative flex-1 min-w-[180px]">
+            <div className={`flex items-center gap-2 ${colors.cardDark} border ${colors.border} rounded-lg px-3 py-1.5 focus-within:border-[#FF3B30] transition-colors`}>
+              <Search className={`w-4 h-4 ${colors.textMuted} flex-shrink-0`} />
+              <input
+                type="text"
+                value={projectDropdownOpen ? projectSearch : selectedLabel}
+                onChange={(e) => setProjectSearch(e.target.value)}
+                onFocus={() => { setProjectSearch(''); setProjectDropdownOpen(true); }}
+                onBlur={() => setTimeout(() => setProjectDropdownOpen(false), 150)}
+                placeholder="Buscar proyecto..."
+                className={`flex-1 bg-transparent text-sm ${colors.textPrimary} placeholder-${colors.textMuted} focus:outline-none min-w-0`}
+              />
+              <ChevronDown className={`w-4 h-4 ${colors.textMuted} flex-shrink-0 transition-transform ${projectDropdownOpen ? 'rotate-180' : ''}`} />
+            </div>
+            {projectDropdownOpen && (
+              <div className={`absolute top-full left-0 right-0 mt-1 ${colors.dropdownBg} border rounded-lg shadow-xl z-50 max-h-56 overflow-y-auto`}>
+                {filteredOptions.length === 0 ? (
+                  <div className={`px-3 py-3 text-sm ${colors.textMuted} text-center`}>Sin resultados</div>
+                ) : filteredOptions.map((opt) => (
+                  <button
+                    key={opt.id}
+                    onMouseDown={() => {
+                      handleProjectChange(opt.id);
+                      setProjectSearch('');
+                      setProjectDropdownOpen(false);
+                    }}
+                    className={`w-full text-left px-3 py-2.5 text-sm transition-colors ${colors.dropdownItem} ${
+                      opt.id === selectedId ? 'text-[#FF3B30] font-medium' : opt.id === '' ? colors.textMuted : ''
+                    }`}
+                  >
+                    {opt.name}
+                  </button>
+                ))}
               </div>
-              <p className={`text-sm ${colors.textMuted}`}>Análisis avanzado basado en datos del sistema</p>
-            </motion.div>
-
-            {}
-            <motion.div className="hidden md:flex items-center gap-2" initial={{
-            opacity: 0,
-            x: 20
-          }} animate={{
-            opacity: 1,
-            x: 0
-          }} transition={{
-            delay: 0.3,
-            duration: 0.5
-          }}>
-              <motion.div whileHover={{
-              scale: 1.05
-            }} whileTap={{
-              scale: 0.95
-            }}>
-                <Button variant="secondary" icon={Download} className="text-xs">
-                  Exportar PDF
-                </Button>
-              </motion.div>
-            </motion.div>
-          </div>
-        </motion.div>
-
-        {}
-        <div className="flex-1 overflow-y-auto p-6 md:p-8 space-y-6">
-          {}
-          <AnimatePresence>
-            {showSuggestions && messages.length <= 3 && <motion.div initial={{
-            opacity: 0,
-            y: 20
-          }} animate={{
-            opacity: 1,
-            y: 0
-          }} exit={{
-            opacity: 0,
-            y: -20
-          }} transition={{
-            duration: 0.4
-          }}>
-                <p className={`text-sm font-medium ${colors.textMuted} mb-4`}>Sugerencias rápidas</p>
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-                  {quickSuggestions.map((suggestion, index) => {
-                const Icon = suggestion.icon;
-                return <motion.button key={suggestion.id} onClick={() => handleSuggestionClick(suggestion.question)} className={`${colors.card} border ${colors.border} rounded-xl p-4 hover:${colors.borderHover} transition-all text-left group relative overflow-hidden`} initial={{
-                  opacity: 0,
-                  scale: 0.9
-                }} animate={{
-                  opacity: 1,
-                  scale: 1
-                }} transition={{
-                  delay: index * 0.1,
-                  duration: 0.3
-                }} whileHover={{
-                  scale: 1.02,
-                  y: -4
-                }} whileTap={{
-                  scale: 0.98
-                }}>
-                        <motion.div className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-300" style={{
-                    background: `linear-gradient(135deg, ${suggestion.color}15 0%, rgba(0,0,0,0) 100%)`
-                  }} />
-                        <div className="flex items-start gap-3 relative z-10">
-                          <motion.div className="p-2 rounded-lg" style={{
-                      backgroundColor: `${suggestion.color}20`
-                    }} whileHover={{
-                      rotate: [0, -10, 10, -10, 0],
-                      scale: 1.1
-                    }} transition={{
-                      duration: 0.5
-                    }}>
-                            <Icon className="w-4 h-4" style={{
-                        color: suggestion.color
-                      }} />
-                          </motion.div>
-                          <p className={`text-sm ${colors.textPrimary} flex-1`}>{suggestion.question}</p>
-                        </div>
-                      </motion.button>;
-              })}
-                </div>
-              </motion.div>}
-          </AnimatePresence>
-
-          {}
-          <div className="space-y-6">
-            <AnimatePresence>
-              {messages.map((message, index) => <motion.div key={message.id} className={`flex ${message.type === 'user' ? 'justify-end' : 'justify-start'}`} initial={{
-              opacity: 0,
-              y: 20,
-              scale: 0.95
-            }} animate={{
-              opacity: 1,
-              y: 0,
-              scale: 1
-            }} exit={{
-              opacity: 0,
-              scale: 0.95
-            }} transition={{
-              delay: index * 0.05,
-              duration: 0.3
-            }}>
-                  <div className={`max-w-3xl ${message.type === 'user' ? 'w-auto' : 'w-full'}`}>
-                    <div className="flex items-start gap-3">
-                      {message.type === 'ai' && <motion.div className={`w-8 h-8 rounded-lg ${colors.redBgSubtle} border ${colors.redBorder} flex items-center justify-center flex-shrink-0`} whileHover={{
-                    scale: 1.1,
-                    rotate: 360
-                  }} transition={{
-                    duration: 0.5
-                  }}>
-                          <Sparkles className={`w-4 h-4 ${colors.redText}`} />
-                        </motion.div>}
-                      
-                      <div className="flex-1">
-                        <motion.div className={`rounded-xl p-4 ${message.type === 'user' ? `${colors.redBg} text-white ml-auto` : `${colors.card} border ${colors.border} ${colors.textPrimary}`}`} whileHover={message.type === 'ai' ? {
-                      borderColor: colors.redPrimary + '40'
-                    } : {
-                      scale: 1.01
-                    }}>
-                          <p className="text-sm leading-relaxed whitespace-pre-wrap">{message.content}</p>
-                          
-                          {}
-                          {message.metadata?.kpis && <motion.div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-4" initial={{
-                        opacity: 0,
-                        y: 10
-                      }} animate={{
-                        opacity: 1,
-                        y: 0
-                      }} transition={{
-                        delay: 0.2
-                      }}>
-                              {message.metadata.kpis.map((kpi, index) => <motion.div key={index} className={`${colors.cardDarker} rounded-lg p-3 border ${colors.border} group cursor-pointer relative overflow-hidden`} whileHover={{
-                          scale: 1.05,
-                          y: -2,
-                          borderColor: kpi.color + '40'
-                        }} transition={{
-                          duration: 0.2
-                        }}>
-                                  <motion.div className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-300" style={{
-                            background: `linear-gradient(135deg, ${kpi.color}10 0%, rgba(0,0,0,0) 100%)`
-                          }} />
-                                  <p className={`text-xs ${colors.textMuted} mb-1 relative z-10`}>{kpi.label}</p>
-                                  <motion.p className="text-xl font-bold relative z-10" style={{
-                            color: kpi.color
-                          }} whileHover={{
-                            scale: 1.1
-                          }}>
-                                    {kpi.value}
-                                  </motion.p>
-                                </motion.div>)}
-                            </motion.div>}
-
-                          {}
-                          {message.metadata?.chart && <motion.div className={`mt-4 ${colors.cardDarker} rounded-lg p-4 border ${colors.border}`} initial={{
-                        opacity: 0,
-                        scale: 0.95
-                      }} animate={{
-                        opacity: 1,
-                        scale: 1
-                      }} transition={{
-                        delay: 0.3
-                      }} whileHover={{
-                        borderColor: colors.redPrimary + '40'
-                      }}>
-                              <p className={`text-xs ${colors.textMuted} mb-3`}>Tendencia de avance (últimas 6 semanas)</p>
-                              <ResponsiveContainer width="100%" height={80}>
-                                <LineChart data={miniChartData}>
-                                  <XAxis hide />
-                                  <YAxis hide domain={[0, 100]} />
-                                  <Line type="monotone" dataKey="value" stroke={colors.redPrimary} strokeWidth={2} dot={false} />
-                                </LineChart>
-                              </ResponsiveContainer>
-                            </motion.div>}
-
-                          {}
-                          {message.metadata?.recommendations && <motion.div className={`mt-4 ${colors.cardDarker} rounded-lg p-4 border ${colors.border}`} initial={{
-                        opacity: 0,
-                        y: 10
-                      }} animate={{
-                        opacity: 1,
-                        y: 0
-                      }} transition={{
-                        delay: 0.4
-                      }}>
-                              <div className="flex items-center gap-2 mb-3">
-                                <motion.div whileHover={{
-                            rotate: 360,
-                            scale: 1.2
-                          }} transition={{
-                            duration: 0.5
-                          }}>
-                                  <Zap className="w-4 h-4 text-yellow-500" />
-                                </motion.div>
-                                <p className={`text-xs font-semibold ${colors.textPrimary}`}>Recomendaciones</p>
-                              </div>
-                              <ul className="space-y-2">
-                                {message.metadata.recommendations.map((rec, index) => <motion.li key={index} className={`flex items-start gap-2 text-xs ${colors.textMuted}`} initial={{
-                            opacity: 0,
-                            x: -10
-                          }} animate={{
-                            opacity: 1,
-                            x: 0
-                          }} transition={{
-                            delay: 0.5 + index * 0.1
-                          }} whileHover={{
-                            x: 4
-                          }}>
-                                    <CheckCircle2 className="w-3 h-3 text-green-500 mt-0.5 flex-shrink-0" />
-                                    <span>{rec}</span>
-                                  </motion.li>)}
-                              </ul>
-                            </motion.div>}
-
-                          {}
-                          {message.metadata?.actions && <motion.div className="flex flex-wrap gap-2 mt-4" initial={{
-                        opacity: 0,
-                        y: 10
-                      }} animate={{
-                        opacity: 1,
-                        y: 0
-                      }} transition={{
-                        delay: 0.5
-                      }}>
-                              {message.metadata.actions.map((action, index) => {
-                          const Icon = action.icon;
-                          return <motion.button key={index} className={`flex items-center gap-2 px-3 py-2 ${colors.redBg} text-white text-xs font-medium rounded-lg transition-all relative overflow-hidden group`} whileHover={{
-                            scale: 1.05,
-                            backgroundColor: theme === 'dark' ? '#E31837' : '#4A0020'
-                          }} whileTap={{
-                            scale: 0.95
-                          }}>
-                                    <motion.div className="absolute inset-0 bg-white/0 group-hover:bg-white/10 transition-colors duration-300" />
-                                    <span className="relative z-10">{action.label}</span>
-                                    <motion.div whileHover={{
-                              x: 3
-                            }} transition={{
-                              duration: 0.2
-                            }}>
-                                      <Icon className="w-3 h-3 relative z-10" />
-                                    </motion.div>
-                                  </motion.button>;
-                        })}
-                            </motion.div>}
-                        </motion.div>
-                        
-                        <p className={`text-xs ${colors.textMuted} mt-2 ml-1`}>{message.timestamp}</p>
-                      </div>
-
-                      {message.type === 'user' && <motion.div className={`w-8 h-8 rounded-lg ${colors.card} border ${colors.border} flex items-center justify-center flex-shrink-0`} whileHover={{
-                    scale: 1.1,
-                    rotate: 5
-                  }}>
-                          <span className="text-sm">👤</span>
-                        </motion.div>}
-                    </div>
-                  </div>
-                </motion.div>)}
-            </AnimatePresence>
-
-            {}
-            <AnimatePresence>
-              {isTyping && <motion.div className="flex justify-start" initial={{
-              opacity: 0,
-              y: 20
-            }} animate={{
-              opacity: 1,
-              y: 0
-            }} exit={{
-              opacity: 0,
-              y: -20
-            }} transition={{
-              duration: 0.3
-            }}>
-                  <div className="max-w-3xl">
-                    <div className="flex items-start gap-3">
-                      <motion.div className={`w-8 h-8 rounded-lg ${colors.redBgSubtle} border ${colors.redBorder} flex items-center justify-center flex-shrink-0`} animate={{
-                    scale: [1, 1.05, 1],
-                    rotate: [0, 5, -5, 0]
-                  }} transition={{
-                    repeat: Infinity,
-                    duration: 1.5
-                  }}>
-                        <Sparkles className={`w-4 h-4 ${colors.redText}`} />
-                      </motion.div>
-                      <div className={`${colors.card} border ${colors.border} rounded-xl p-4`}>
-                        <div className="flex items-center gap-2">
-                          <motion.div className={`w-2 h-2 rounded-full ${colors.textMuted.replace('text-', 'bg-')}`} animate={{
-                        y: [0, -8, 0]
-                      }} transition={{
-                        repeat: Infinity,
-                        duration: 0.6,
-                        delay: 0
-                      }} />
-                          <motion.div className={`w-2 h-2 rounded-full ${colors.textMuted.replace('text-', 'bg-')}`} animate={{
-                        y: [0, -8, 0]
-                      }} transition={{
-                        repeat: Infinity,
-                        duration: 0.6,
-                        delay: 0.2
-                      }} />
-                          <motion.div className={`w-2 h-2 rounded-full ${colors.textMuted.replace('text-', 'bg-')}`} animate={{
-                        y: [0, -8, 0]
-                      }} transition={{
-                        repeat: Infinity,
-                        duration: 0.6,
-                        delay: 0.4
-                      }} />
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </motion.div>}
-            </AnimatePresence>
+            )}
           </div>
 
-          <div ref={messagesEndRef} />
+          {/* ── AI action buttons ─────────────────────────────────────── */}
+          {selectedId && (
+            <div className="flex items-center gap-2 flex-shrink-0 ml-auto">
+              {/* Executive Summary */}
+              <button
+                disabled={summary.isGenerating}
+                onClick={summary.generate}
+                title="Descargar resumen ejecutivo en PDF"
+                className={`flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg border transition-all disabled:opacity-50 disabled:cursor-not-allowed ${
+                  summary.isGenerating
+                    ? `${colors.cardDark} ${colors.border} ${colors.textMuted}`
+                    : `${colors.cardDark} ${colors.border} ${colors.textMuted} hover:border-[#FF3B30]/40 hover:text-[#FF3B30]`
+                }`}
+              >
+                {summary.isGenerating ? (
+                  <><Loader2 className="w-3.5 h-3.5 animate-spin" />{summary.progressMessage || 'Generando PDF...'}</>
+                ) : (
+                  <><FileText className="w-3.5 h-3.5" />Resumen ejecutivo<FileDown className="w-3 h-3" /></>
+                )}
+              </button>
+
+              {/* Risk Analysis */}
+              <button
+                disabled={risk.isAnalyzing}
+                onClick={risk.data ? () => setRiskModalOpen(true) : risk.analyze}
+                title="Analizar riesgos del proyecto"
+                className={`flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg border transition-all disabled:opacity-50 disabled:cursor-not-allowed ${
+                  risk.isAnalyzing
+                    ? `${colors.cardDark} ${colors.border} ${colors.textMuted}`
+                    : `${colors.cardDark} ${colors.border} ${colors.textMuted} hover:border-[#FF9F0A]/40 hover:text-[#FF9F0A]`
+                }`}
+              >
+                {risk.isAnalyzing ? (
+                  <><Loader2 className="w-3.5 h-3.5 animate-spin" />Analizando...</>
+                ) : (
+                  <><ShieldAlert className="w-3.5 h-3.5" />Análisis de riesgo</>
+                )}
+              </button>
+            </div>
+          )}
+
+          {/* Error toasts */}
+          {summary.error && (
+            <div className="w-full mt-1 px-3 py-2 bg-[#FF3B30]/10 border border-[#FF3B30]/20 rounded-lg flex items-center justify-between gap-2">
+              <p className="text-xs text-[#FF3B30]">{summary.error}</p>
+              <button onClick={summary.clearError} className="text-[#FF3B30] hover:opacity-70"><X className="w-3.5 h-3.5" /></button>
+            </div>
+          )}
+          {risk.error && (
+            <div className="w-full mt-1 px-3 py-2 bg-[#FF9F0A]/10 border border-[#FF9F0A]/20 rounded-lg flex items-center justify-between gap-2">
+              <p className="text-xs text-[#FF9F0A]">{risk.error}</p>
+              <button onClick={risk.clearError} className="text-[#FF9F0A] hover:opacity-70"><X className="w-3.5 h-3.5" /></button>
+            </div>
+          )}
+
+          {messages.length > 0 && (
+            <button
+              onClick={clearChat}
+              className={`${colors.textMuted} hover:text-[#FF3B30] transition-colors flex items-center gap-1.5 text-xs flex-shrink-0`}
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+              Limpiar
+            </button>
+          )}
         </div>
 
-        {}
-        <motion.div className={`border-t ${colors.border} ${colors.bg} p-4 md:p-6 flex-shrink-0`} initial={{
-        opacity: 0,
-        y: 20
-      }} animate={{
-        opacity: 1,
-        y: 0
-      }} transition={{
-        delay: 0.4,
-        duration: 0.5
-      }}>
-          <div className="max-w-4xl mx-auto">
-            {}
-            <div className="flex flex-wrap items-center gap-2 mb-4">
-              
-              
-              <div className="ml-auto flex items-center gap-2">
-                
-              </div>
-            </div>
+        {/* Chat area */}
+        <div className={`flex-1 ${colors.card} border ${colors.border} rounded-xl overflow-hidden flex flex-col`} style={{ minHeight: '420px' }}>
 
-            {}
-            <div className="flex items-end gap-3">
-              <div className="flex-1 relative group">
-                <motion.input ref={inputRef} type="text" value={inputValue} onChange={e => setInputValue(e.target.value)} onKeyPress={handleKeyPress} placeholder="Pregunta sobre proyectos, sprints, métricas o desempeño…" className={`w-full px-4 py-3 pr-12 ${colors.card} border ${colors.border} rounded-xl ${colors.textPrimary} placeholder:${colors.textMuted} outline-none transition-all text-sm`} style={{
-                focusBorderColor: colors.redPrimary,
-                focusRingColor: colors.redPrimary + '33'
-              }} whileFocus={{
-                scale: 1.01
-              }} />
-                <motion.button className={`absolute right-3 top-1/2 -translate-y-1/2 p-1.5 hover:${colors.bg} rounded-lg transition-all`} whileHover={{
-                scale: 1.1,
-                rotate: 15
-              }} whileTap={{
-                scale: 0.9
-              }}>
-                  <Paperclip className={`w-4 h-4 ${colors.textMuted}`} />
-                </motion.button>
-              </div>
-              <motion.button onClick={handleSendMessage} disabled={!inputValue.trim()} className={`px-5 py-3 ${colors.redBg} text-white rounded-xl transition-all flex items-center gap-2 text-sm font-medium relative overflow-hidden group disabled:opacity-30 disabled:cursor-not-allowed`} whileHover={inputValue.trim() ? {
-              scale: 1.05,
-              backgroundColor: theme === 'dark' ? '#E31837' : '#4A0020'
-            } : {}} whileTap={inputValue.trim() ? {
-              scale: 0.95
-            } : {}}>
-                <motion.div className="absolute inset-0 bg-white/0 group-hover:bg-white/10 transition-colors duration-300" />
-                <span className="hidden sm:inline relative z-10">Enviar</span>
-                <motion.div whileHover={{
-                x: 3
-              }} transition={{
-                duration: 0.2
-              }} className="relative z-10">
-                  <Send className="w-4 h-4" />
+          {/* Messages */}
+          <div className="flex-1 overflow-y-auto p-4 space-y-4">
+            {messages.length === 0 && (
+              <motion.div
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="flex flex-col items-center justify-center h-full py-12 text-center"
+              >
+                <div className="w-16 h-16 bg-[#FF3B30]/10 rounded-full flex items-center justify-center mb-4">
+                  <Sparkles className="w-8 h-8 text-[#FF3B30]" />
+                </div>
+                <h3 className={`${colors.textPrimary} font-semibold mb-1`}>
+                  {selectedProject ? `Analizando ${selectedProject.name}` : 'Asistente de proyectos'}
+                </h3>
+                <p className={`text-sm ${colors.textMuted} max-w-sm`}>
+                  {selectedProject
+                    ? 'Tengo acceso a los datos reales de este proyecto. Pregúntame lo que necesites.'
+                    : 'Selecciona un proyecto para obtener respuestas basadas en datos reales.'}
+                </p>
+
+                <div className="flex flex-wrap gap-2 mt-6 justify-center">
+                  {suggestions.map((s) => (
+                    <button
+                      key={s.text}
+                      onClick={() => sendMessage(s.text)}
+                      className={`flex items-center gap-2 px-3 py-2 ${colors.cardDark} border ${colors.border} rounded-lg text-xs ${colors.textMuted} hover:border-[#FF3B30]/40 hover:text-[#FF3B30] transition-all text-left`}
+                    >
+                      <s.icon className="w-3.5 h-3.5 flex-shrink-0" style={{ color: s.color }} />
+                      {s.text}
+                    </button>
+                  ))}
+                </div>
+              </motion.div>
+            )}
+
+            <AnimatePresence initial={false}>
+              {messages.map((msg) => (
+                <motion.div
+                  key={msg.id}
+                  initial={{ opacity: 0, y: 8 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.2 }}
+                  className={`flex gap-3 ${msg.role === 'user' ? 'flex-row-reverse' : 'flex-row'}`}
+                >
+                  <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${
+                    msg.role === 'user'
+                      ? 'bg-gradient-to-br from-[#FF3B30] to-[#FF9F0A]'
+                      : 'bg-[#FF3B30]/10 border border-[#FF3B30]/20'
+                  }`}>
+                    {msg.role === 'user'
+                      ? <User className="w-4 h-4 text-white" />
+                      : <Bot className="w-4 h-4 text-[#FF3B30]" />}
+                  </div>
+
+                  <div className={`max-w-[80%] rounded-xl px-4 py-3 text-sm leading-relaxed ${
+                    msg.role === 'user'
+                      ? `${colors.userBubble} rounded-tr-sm`
+                      : `${colors.aiBubble} rounded-tl-sm`
+                  }`}>
+                    {msg.role === 'assistant' && msg.content ? (
+                      <div className="prose prose-sm max-w-none prose-invert">
+                        <ReactMarkdown>{msg.content}</ReactMarkdown>
+                      </div>
+                    ) : (
+                      msg.content
+                    )}
+                    {msg.streaming && (
+                      <span className="inline-block w-1.5 h-4 bg-[#FF3B30] rounded-sm ml-0.5 animate-pulse align-middle" />
+                    )}
+                  </div>
                 </motion.div>
-              </motion.button>
-            </div>
+              ))}
+            </AnimatePresence>
 
-            <p className={`text-xs ${colors.textMuted} text-center mt-3`}>
-              El asistente puede cometer errores. Verifica información crítica con los reportes oficiales.
+            <div ref={bottomRef} />
+          </div>
+
+          {/* Input */}
+          <div className={`border-t ${colors.border} p-3`}>
+            <form onSubmit={handleSubmit} className="flex gap-2 items-end">
+              <textarea
+                ref={inputRef}
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                onKeyDown={handleKeyDown}
+                placeholder={streaming ? 'Respondiendo...' : 'Escribe tu pregunta... (Enter para enviar, Shift+Enter nueva línea)'}
+                disabled={streaming}
+                maxLength={2000}
+                rows={1}
+                className={`flex-1 ${colors.cardDark} border ${colors.border} rounded-xl px-4 py-2.5 text-sm ${colors.textPrimary} focus:outline-none focus:border-[#FF3B30] resize-none transition-colors disabled:opacity-50`}
+                style={{ maxHeight: '120px', overflowY: 'auto' }}
+                onInput={(e) => {
+                  const el = e.currentTarget;
+                  el.style.height = 'auto';
+                  el.style.height = `${Math.min(el.scrollHeight, 120)}px`;
+                }}
+              />
+              <button
+                type="submit"
+                disabled={!input.trim() || streaming}
+                className="w-10 h-10 bg-[#FF3B30] rounded-xl flex items-center justify-center hover:bg-[#E31837] transition-colors disabled:opacity-40 disabled:cursor-not-allowed flex-shrink-0"
+              >
+                {streaming
+                  ? <Loader2 className="w-4 h-4 text-white animate-spin" />
+                  : <Send className="w-4 h-4 text-white" />}
+              </button>
+            </form>
+            <p className={`text-[10px] ${colors.textMuted} mt-1.5 text-center`}>
+              Powered by Groq · llama-3.1-8b-instant · Las respuestas se basan en datos reales del proyecto
             </p>
           </div>
-        </motion.div>
+        </div>
       </div>
-    </div>;
+
+      {/* Risk Analysis Modal */}
+      {riskModalOpen && risk.data && (
+        <RiskAnalysisModal
+          projectName={selectedProject?.name ?? ''}
+          data={risk.data}
+          generatedAt={risk.generatedAt}
+          isDownloadingPdf={risk.isDownloadingPdf}
+          onDownloadPdf={risk.downloadPdf}
+          onClose={() => setRiskModalOpen(false)}
+          theme={theme}
+        />
+      )}
+    </div>
+  );
 }
