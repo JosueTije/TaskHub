@@ -53,7 +53,6 @@ export function CreateProject() {
     riskLevel: 'LOW',
     startDate: '',
     targetEndDate: '',
-    budget: '',
   });
 
   const [selectedMemberIds, setSelectedMemberIds] = useState<string[]>([]);
@@ -197,7 +196,6 @@ export function CreateProject() {
         riskLevel: projectForm.riskLevel,
         startDate: projectForm.startDate,
         targetEndDate: projectForm.targetEndDate,
-        budget: projectForm.budget ? Number(projectForm.budget) : null,
         memberIds: selectedMemberIds,
       };
 
@@ -315,19 +313,6 @@ export function CreateProject() {
                 </select>
               </div>
 
-              <div>
-                <label className="block text-sm font-medium text-[#8E8E93] mb-2">
-                  Presupuesto (USD)
-                </label>
-                <input
-                  type="number"
-                  min="0"
-                  value={projectForm.budget}
-                  onChange={(e) => setProjectForm({ ...projectForm, budget: e.target.value })}
-                  placeholder="50000"
-                  className="w-full px-4 py-2.5 bg-[#0F0F0F] border border-white/10 rounded-lg text-white placeholder-[#8E8E93] focus:border-[#FF3B30] focus:ring-1 focus:ring-[#FF3B30] outline-none transition-all"
-                />
-              </div>
 
               <div>
                 <label className="block text-sm font-medium text-[#8E8E93] mb-2">

@@ -28,7 +28,15 @@ const allowedOrigins = [
 
 app.use(
   cors({
-    origin: allowedOrigins,
+    origin: (origin, callback) => {
+      // allow requests with no origin (mobile apps, curl, etc.)
+      if (!origin) return callback(null, true);
+      // allow exact matches
+      if (allowedOrigins.includes(origin)) return callback(null, true);
+      // allow any vercel preview deploy for this project
+      if (/^https:\/\/taskhub-[a-z0-9]+-julietalozano13s-projects\.vercel\.app$/.test(origin)) return callback(null, true);
+      callback(new Error("Not allowed by CORS"));
+    },
     credentials: true,
   })
 );

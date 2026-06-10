@@ -103,13 +103,13 @@ export function Dashboard() {
 
       if (role === 'DEVELOPER') {
         const sprintResults = await Promise.allSettled(
-          projectList.map(p => authFetch<BackendSprint[]>(`/sprints/project/${p.id}`))
+          projectList.map(p => authFetch<{ sprints: BackendSprint[] }>(`/sprints/project/${p.id}`))
         );
 
         const allSprintsByProject: { sprint: BackendSprint; projectName: string }[] = [];
         sprintResults.forEach((result, i) => {
           if (result.status === 'fulfilled') {
-            result.value.forEach(sprint => {
+            (result.value.sprints ?? []).forEach(sprint => {
               allSprintsByProject.push({ sprint, projectName: projectList[i].name });
             });
           }
@@ -117,15 +117,15 @@ export function Dashboard() {
 
         const ticketResults = await Promise.allSettled(
           allSprintsByProject.map(({ sprint }) =>
-            authFetch<BackendTicket[]>(`/tickets/sprint/${sprint.id}`)
+            authFetch<{ tickets: BackendTicket[] }>(`/tickets/sprint/${sprint.id}`)
           )
         );
 
         const gathered: (BackendTicket & { projectName: string; sprintName: string })[] = [];
         ticketResults.forEach((result, i) => {
           if (result.status === 'fulfilled') {
-            result.value
-              .filter(t => t.assignedToId === user.id)
+            (result.value.tickets ?? [])
+              .filter(t => t.assignedToId === user!.id)
               .forEach(ticket => {
                 gathered.push({
                   ...ticket,
