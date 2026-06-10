@@ -398,13 +398,11 @@ const selectedSprintFromFilter = projectSprints.find((s) => s.id === sprintFilte
   const selectedAssigneeName =
     assignableDevelopers.find((developer: any) => developer.id === ticketData.assignee)?.name || '';
 
-useEffect(() => {
-  if (!realSprints.length) {
-    setRealTickets([]);
-    return;
-  }
-
-  const loadTickets = async () => {
+  const loadTickets = useCallback(async () => {
+    if (!realSprints.length) {
+      setRealTickets([]);
+      return;
+    }
     try {
       const rawSprints =
         sprintFilter === 'active'
@@ -431,10 +429,11 @@ useEffect(() => {
     } catch (error: any) {
       toast.error(error.message || 'Error al cargar tickets');
     }
-  };
+  }, [sprintFilter, realSprints]);
 
+useEffect(() => {
   loadTickets();
-}, [sprintFilter, realSprints]);
+}, [loadTickets]);
   const [ticketsView, setTicketsView] = useState<'table' | 'kanban'>('table');
   const [showMyTicketsOnly, setShowMyTicketsOnly] = useState(false);
   const [showSprintDropdown, setShowSprintDropdown] = useState(false);
