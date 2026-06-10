@@ -496,9 +496,6 @@ export function Dashboard() {
               <h3 className={`text-lg font-semibold ${colors.textPrimary}`}>Proyectos Activos</h3>
               <p className={`text-sm ${colors.textSecondary} mt-1`}>Gestiona y monitorea tus proyectos</p>
             </div>
-            <Link to="/create-project">
-              <Button variant="primary" icon={Plus}>Nuevo Proyecto</Button>
-            </Link>
           </div>
           <div className="overflow-x-auto">
             <table className="w-full">

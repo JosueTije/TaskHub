@@ -24,7 +24,6 @@ import { ProjectGamification } from './pages/ProjectGamification';
 import { Notifications } from './pages/Notifications';
 import { ResetPassword } from './pages/ResetPassword';
 import { UserManagement } from './pages/UserManagement';
-import { UserProfile } from './pages/UserProfile';
 
 function RequireRole({ roles, children }: { roles: string[]; children: React.ReactNode }) {
   const { user, isLoading } = useAuth();
@@ -66,7 +65,6 @@ function App() {
             <Route path="gamification/project/:id" element={<ProjectGamification />} />
             <Route path="notifications" element={<Notifications />} />
             <Route path="user-management" element={<RequireRole roles={['ADMIN']}><UserManagement /></RequireRole>} />
-            <Route path="profile" element={<UserProfile />} />
           </Route>
           
           {/* Catch-all */}
