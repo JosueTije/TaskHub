@@ -524,21 +524,7 @@ export function Metrics() {
 
                           {/* Expanded detail */}
                           {isExpanded && (
-                            <div className={`border-t ${c.expandedBorder} p-4 grid grid-cols-1 lg:grid-cols-2 gap-6`}>
-
-                              {/* Weekly evolution */}
-                              <div>
-                                <div className={`text-xs font-medium ${c.textMuted} mb-3`}>Evolución semanal</div>
-                                <ResponsiveContainer width="100%" height={140}>
-                                  <BarChart data={dev.weeklyEvolution} margin={{ top: 4, right: 4, left: -28, bottom: 0 }}>
-                                    <CartesianGrid strokeDasharray="3 3" stroke={c.chartGrid} />
-                                    <XAxis dataKey="week" tick={{ fill: c.chartTick, fontSize: 10 }} axisLine={false} tickLine={false} />
-                                    <YAxis tick={{ fill: c.chartTick, fontSize: 10 }} axisLine={false} tickLine={false} allowDecimals={false} />
-                                    <Tooltip {...{ ...tooltipStyle, labelStyle: { ...tooltipStyle.labelStyle, fontSize: 11 }, itemStyle: { ...tooltipStyle.itemStyle, fontSize: 11 } }} />
-                                    <Bar dataKey="tickets" name="Tickets" fill="#FF3B30" radius={[3, 3, 0, 0]} />
-                                  </BarChart>
-                                </ResponsiveContainer>
-                              </div>
+                            <div className={`border-t ${c.expandedBorder} p-4`}>
 
                               {/* Priority distribution + recent tickets */}
                               <div className="space-y-4">
