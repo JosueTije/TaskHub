@@ -10,6 +10,11 @@ const { createNotification, notifyProjectAdminsAndPMs } = require("../services/n
 const { logActivity } = require("../services/activity.service");
 const prisma = require("../config/prisma");
 const githubService = require("../services/github.service");
+const { getIO } = require("../config/socket");
+
+function emit(event, projectId, payload) {
+  try { getIO()?.to(`project:${projectId}`).emit(event, payload); } catch {}
+}
 
 function ticketErrorStatus(msg = "") {
   if (msg.includes("Rol no autorizado") || msg.includes("No tienes permisos")) return 403;
@@ -52,6 +57,8 @@ async function createTicketController(req, res) {
       entityTitle: ticket.title,
       action: "created",
     }).catch(() => {});
+
+    emit("ticket:created", ticket.projectId, { ticket });
 
     return res.status(201).json({
       message: "Ticket creado correctamente",
@@ -121,6 +128,8 @@ async function updateTicketController(req, res) {
       entityTitle: ticket.title,
       action: "updated",
     }).catch(() => {});
+
+    emit("ticket:updated", ticket.projectId, { ticket });
 
     return res.status(200).json({
       message: "Ticket actualizado correctamente",
@@ -234,6 +243,8 @@ async function updateTicketStatusController(req, res) {
       metadata: { status },
     }).catch(() => {});
 
+    emit("ticket:updated", ticket.projectId, { ticket });
+
     return res.status(200).json({
       message: "Estado del ticket actualizado correctamente",
       ticket,
@@ -254,6 +265,8 @@ async function deleteTicketController(req, res) {
       userId: req.user.sub,
       role: req.user.role,
     });
+
+    emit("ticket:deleted", result.projectId, { ticketId: id, projectId: result.projectId });
 
     return res.status(200).json(result);
   } catch (error) {

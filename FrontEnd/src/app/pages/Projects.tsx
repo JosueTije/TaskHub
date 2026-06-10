@@ -179,6 +179,8 @@ export function Projects() {
 
   const [viewMode, setViewMode] = useState<ViewMode>('grid');
   const [searchQuery, setSearchQuery] = useState('');
+  const [riskFilter, setRiskFilter] = useState<string>('');
+  const [statusFilter, setStatusFilter] = useState<string>('');
   const [showCreateProjectModal, setShowCreateProjectModal] = useState(false);
   const [showCreateUserModal, setShowCreateUserModal] = useState(false);
   const [userForm, setUserForm] = useState({ fullName: '', email: '', role: '', temporaryPassword: '' });
@@ -230,9 +232,13 @@ export function Projects() {
         )
       : null;
 
-  const filteredProjects = userProjects.filter((project) =>
-    project.name.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  const filteredProjects = userProjects.filter((project) => {
+    const matchesSearch = project.name.toLowerCase().includes(searchQuery.toLowerCase());
+    const effectiveRisk = project.analytics?.kpis.risk ?? project.riskLevel;
+    const matchesRisk = !riskFilter || effectiveRisk === riskFilter;
+    const matchesStatus = !statusFilter || project.status === statusFilter;
+    return matchesSearch && matchesRisk && matchesStatus;
+  });
 
   const highRiskProjects = userProjects.filter((p) => {
     const risk = p.analytics?.kpis.risk ?? p.riskLevel;
@@ -319,8 +325,7 @@ export function Projects() {
           riskLevel: projectForm.riskLevel,
           startDate: projectForm.startDate,
           targetEndDate: projectForm.targetEndDate,
-          budget: projectForm.budget ? Number(projectForm.budget) : null,
-          memberIds: [],
+            memberIds: [],
         }),
       });
 
@@ -449,6 +454,32 @@ export function Projects() {
                 onBlur={(e) => (e.target.style.borderColor = theme === 'dark' ? 'rgba(255, 255, 255, 0.1)' : 'rgba(74, 69, 61, 0.1)')}
               />
             </div>
+
+            <select
+              value={riskFilter}
+              onChange={(e) => setRiskFilter(e.target.value)}
+              className={`px-4 py-3 ${colors.bgSecondary} border ${colors.border} rounded-xl ${colors.textPrimary} outline-none transition-all text-sm cursor-pointer`}
+              style={{ borderColor: theme === 'dark' ? 'rgba(255,255,255,0.1)' : 'rgba(74,69,61,0.1)' }}
+            >
+              <option value="">Todas las prioridades</option>
+              <option value="LOW">Prioridad Baja</option>
+              <option value="MEDIUM">Prioridad Media</option>
+              <option value="HIGH">Prioridad Alta</option>
+              <option value="CRITICAL">Prioridad Crítica</option>
+            </select>
+
+            <select
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value)}
+              className={`px-4 py-3 ${colors.bgSecondary} border ${colors.border} rounded-xl ${colors.textPrimary} outline-none transition-all text-sm cursor-pointer`}
+              style={{ borderColor: theme === 'dark' ? 'rgba(255,255,255,0.1)' : 'rgba(74,69,61,0.1)' }}
+            >
+              <option value="">Todos los estados</option>
+              <option value="ACTIVE">Activo</option>
+              <option value="ON_HOLD">En Pausa</option>
+              <option value="COMPLETED">Completado</option>
+              <option value="ARCHIVED">Archivado</option>
+            </select>
 
             <div className={`flex items-center gap-1 ${colors.bgSecondary} border ${colors.border} rounded-xl p-1`}>
               <motion.button
@@ -671,9 +702,9 @@ export function Projects() {
                 Proyectos ({filteredProjects.length})
               </motion.h2>
 
-              {searchQuery && (
+              {(searchQuery || riskFilter || statusFilter) && (
                 <motion.button
-                  onClick={() => setSearchQuery('')}
+                  onClick={() => { setSearchQuery(''); setRiskFilter(''); setStatusFilter(''); }}
                   className="text-xs font-medium hover:underline"
                   style={{ color: colors.accent }}
                   initial={{ opacity: 0 }}
@@ -1023,16 +1054,6 @@ export function Projects() {
                     </select>
                   </div>
 
-                  <div>
-                    <label className={`block text-sm font-medium ${colors.textPrimary} mb-2`}>Presupuesto (USD)</label>
-                    <input
-                      type="number"
-                      value={projectForm.budget}
-                      onChange={(e) => setProjectForm({ ...projectForm, budget: e.target.value })}
-                      placeholder="150000"
-                      className={`w-full px-4 py-3 ${colors.bgTertiary} border ${colors.border} rounded-xl ${colors.textPrimary} placeholder:${colors.textSecondary} outline-none transition-all text-sm`}
-                    />
-                  </div>
 
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>

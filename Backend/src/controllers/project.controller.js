@@ -11,6 +11,11 @@ const {
 } = require("../services/project.service");
 const prisma = require("../config/prisma");
 const githubService = require("../services/github.service");
+const { getIO } = require("../config/socket");
+
+function emit(event, projectId, payload) {
+  try { getIO()?.to(`project:${projectId}`).emit(event, payload); } catch {}
+}
 
 async function addProjectMemberController(req, res) {
   try {
@@ -24,6 +29,7 @@ async function addProjectMemberController(req, res) {
       role: req.user.role,
     });
 
+    emit("member:added", projectId, { projectId, member });
     return res.status(201).json({
       message: "Developer agregado correctamente",
       member,
@@ -185,6 +191,7 @@ async function updateProjectController(req, res) {
       role: req.user.role,
       data: req.body,
     });
+    emit("project:updated", project.id, { project });
     return res.status(200).json({ message: "Proyecto actualizado correctamente", project });
   } catch (error) {
     const status = error.message === "Proyecto no encontrado" ? 404
@@ -203,6 +210,7 @@ async function updateProjectStatusController(req, res) {
       role: req.user.role,
       status,
     });
+    emit("project:updated", project.id, { project });
     return res.status(200).json({ message: "Estado del proyecto actualizado correctamente", project });
   } catch (error) {
     const status = error.message === "Proyecto no encontrado" ? 404
@@ -220,6 +228,7 @@ async function removeProjectMemberController(req, res) {
       currentUserId: req.user.sub,
       role: req.user.role,
     });
+    emit("member:removed", projectId, { projectId, userId });
     return res.status(200).json({ message: "Miembro eliminado del proyecto correctamente" });
   } catch (error) {
     const status = error.message === "Proyecto no encontrado" ? 404

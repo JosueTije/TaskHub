@@ -1,9 +1,16 @@
 const prisma = require("../config/prisma");
+const { getIO } = require("../config/socket");
+
+function emitToUser(userId, notification) {
+  try { getIO()?.to(`user:${userId}`).emit("notification:new", { notification }); } catch {}
+}
 
 async function createNotification({ userId, type, title, description, projectName = null }) {
-  return prisma.notification.create({
+  const notification = await prisma.notification.create({
     data: { userId, type, title, description, projectName },
   });
+  emitToUser(userId, notification);
+  return notification;
 }
 
 async function notifyProjectAdminsAndPMs({ projectId, type, title, description, projectName, excludeUserId }) {
@@ -22,6 +29,11 @@ async function notifyProjectAdminsAndPMs({ projectId, type, title, description, 
   await prisma.notification.createMany({
     data: targets.map((userId) => ({ userId, type, title, description, projectName })),
   });
+
+  // notify each target in real-time
+  targets.forEach((userId) =>
+    emitToUser(userId, { userId, type, title, description, projectName, read: false, createdAt: new Date().toISOString() })
+  );
 }
 
 async function getNotifications(userId) {

@@ -10,6 +10,11 @@ const {
 const { logActivity } = require("../services/activity.service");
 const prisma = require("../config/prisma");
 const githubService = require("../services/github.service");
+const { getIO } = require("../config/socket");
+
+function emit(event, projectId, payload) {
+  try { getIO()?.to(`project:${projectId}`).emit(event, payload); } catch {}
+}
 
 function sprintErrorStatus(msg = "") {
   if (msg.includes("Rol no autorizado") || msg.includes("No tienes permisos")) return 403;
@@ -73,6 +78,8 @@ async function createSprintController(req, res) {
       action: "created",
     }).catch(() => {});
 
+    emit("sprint:created", projectId, { sprint });
+
     return res.status(201).json({
       message: "Sprint creado correctamente",
       sprint,
@@ -135,6 +142,8 @@ async function updateSprintController(req, res) {
       userId: req.user.sub,
       role: req.user.role,
     });
+
+    emit("sprint:updated", sprint.projectId, { sprint });
 
     return res.status(200).json({
       message: "Sprint actualizado correctamente",
@@ -207,6 +216,8 @@ async function updateSprintStatusController(req, res) {
       metadata: { status },
     }).catch(() => {});
 
+    emit("sprint:updated", sprint.projectId, { sprint });
+
     return res.status(200).json({
       message: "Estado del sprint actualizado correctamente",
       sprint,
@@ -222,11 +233,15 @@ async function deleteSprintController(req, res) {
   try {
     const { id } = req.params;
 
+    const sprintBefore = await prisma.sprint.findUnique({ where: { id }, select: { projectId: true } });
+
     const result = await deleteSprint({
       sprintId: id,
       userId: req.user.sub,
       role: req.user.role,
     });
+
+    if (sprintBefore) emit("sprint:deleted", sprintBefore.projectId, { sprintId: id, projectId: sprintBefore.projectId });
 
     return res.status(200).json(result);
   } catch (error) {
@@ -291,6 +306,8 @@ async function closeSprintController(req, res) {
         cancelledTickets: result.cancelledTickets,
       },
     }).catch(() => {});
+
+    emit("sprint:closed", result.sprint.projectId, { sprint: result.sprint });
 
     return res.status(200).json({
       message: "Sprint cerrado correctamente",

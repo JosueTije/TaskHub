@@ -1,6 +1,7 @@
 import { createContext, useContext, useEffect, useState, useCallback, ReactNode } from 'react';
 import { authFetch } from '../../services/api';
 import { useAuth } from './AuthContext';
+import { getSocket } from '../../services/socket';
 
 export interface Notification {
   id: string;
@@ -46,6 +47,17 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
     const interval = setInterval(fetch, 60_000);
     return () => clearInterval(interval);
   }, [fetch]);
+
+  useEffect(() => {
+    if (!user?.id) return;
+    const socket = getSocket();
+    if (!socket.connected) socket.connect();
+    socket.emit("join:user", user.id);
+    socket.on("notification:new", ({ notification }: { notification: Notification }) => {
+      setNotifications((prev) => [notification, ...prev]);
+    });
+    return () => { socket.off("notification:new"); };
+  }, [user?.id]);
 
   const markAsRead = useCallback((id: string) => {
     setNotifications((prev) => prev.map((n) => (n.id === id ? { ...n, read: true } : n)));

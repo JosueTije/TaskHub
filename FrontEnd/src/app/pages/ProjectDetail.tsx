@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useState, lazy, Suspense } from 'react';
+import { useEffect, useMemo, useState, useCallback, lazy, Suspense } from 'react';
+import { useProjectSocket } from '../../hooks/useProjectSocket';
 const BranchesTab = lazy(() => import('../components/BranchesTab').then(m => ({ default: m.BranchesTab })));
 import { SrsImportModal } from '../components/SrsImportModal';
 import { useParams, Link, useNavigate } from 'react-router';
@@ -59,6 +60,24 @@ const [projectLoadError, setProjectLoadError] = useState('');
 const [realSprints, setRealSprints] = useState<any[]>([]);
 const [realTickets, setRealTickets] = useState<any[]>([]);
 const [loadingAgile, setLoadingAgile] = useState(false);
+
+useProjectSocket({
+  projectId: id,
+  onTicketCreated:  useCallback((ticket: any) => setRealTickets((prev) => [...prev, ticket]), []),
+  onTicketUpdated:  useCallback((ticket: any) => setRealTickets((prev) => prev.map((t) => t.id === ticket.id ? ticket : t)), []),
+  onTicketDeleted:  useCallback((ticketId: string) => setRealTickets((prev) => prev.filter((t) => t.id !== ticketId)), []),
+  onSprintCreated:  useCallback((sprint: any) => setRealSprints((prev) => [...prev, sprint]), []),
+  onSprintUpdated:  useCallback((sprint: any) => setRealSprints((prev) => prev.map((s) => s.id === sprint.id ? sprint : s)), []),
+  onSprintDeleted:  useCallback((sprintId: string) => setRealSprints((prev) => prev.filter((s) => s.id !== sprintId)), []),
+  onSprintClosed:   useCallback((sprint: any) => setRealSprints((prev) => prev.map((s) => s.id === sprint.id ? sprint : s)), []),
+  onProjectUpdated: useCallback((project: any) => setBackendProjects((prev) => prev.map((p) => p.id === project.id ? { ...p, ...project } : p)), []),
+  onMemberChanged:  useCallback(() => {
+    if (!id) return;
+    authFetch(`/projects/${id}`).then((data: any) => {
+      if (data?.project) setBackendProjects((prev) => prev.map((p) => p.id === id ? data.project : p));
+    }).catch(() => {});
+  }, [id]),
+});
 
 const [availableDevelopers, setAvailableDevelopers] = useState<any[]>([]);
 const [selectedDeveloperId, setSelectedDeveloperId] = useState("");
