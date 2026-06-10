@@ -99,13 +99,14 @@ async function buildAiContext({ projectId, userId, role }) {
     : null;
 
   // ── KPIs ───────────────────────────────────────────────────────────────
-  const totalSP = allTickets.reduce((s, t) => s + (t.storyPoints || 0), 0);
+  const activeTickets = allTickets.filter((t) => t.status !== "CANCELLED");
+  const totalSP = activeTickets.reduce((s, t) => s + (t.storyPoints || 0), 0);
   const doneTickets = allTickets.filter((t) => t.status === "DONE");
   const doneSP = doneTickets.reduce((s, t) => s + (t.storyPoints || 0), 0);
   const progress = totalSP
     ? Math.round((doneSP / totalSP) * 100)
-    : allTickets.length
-    ? Math.round((doneTickets.length / allTickets.length) * 100)
+    : activeTickets.length
+    ? Math.round((doneTickets.length / activeTickets.length) * 100)
     : 0;
 
   let plannedProgress = 0;
@@ -121,14 +122,14 @@ async function buildAiContext({ projectId, userId, role }) {
   const usedHours = doneTickets.reduce((s, t) => s + (t.actualHours || 0), 0);
   const efficiency = usedHours > 0 ? Number((estimatedHours / usedHours).toFixed(2)) : null;
   const spi = progress > 0 && plannedProgress > 0 ? Number((progress / plannedProgress).toFixed(2)) : null;
-  const scheduleVariance = allTickets.length > 0 ? progress - plannedProgress : 0;
+  const scheduleVariance = activeTickets.length > 0 ? progress - plannedProgress : 0;
   const blockedCount = allTickets.filter((t) => t.status === "BLOCKED").length;
 
   // ── Team metrics ───────────────────────────────────────────────────────
   const team = members
     .filter((m) => m.user)
     .map((m) => {
-      const mt = allTickets.filter((t) => t.assignedToId === m.userId);
+      const mt = allTickets.filter((t) => t.assignedToId === m.userId && t.status !== "CANCELLED");
       const done = mt.filter((t) => t.status === "DONE");
       const blocked = mt.filter((t) => t.status === "BLOCKED");
       const est = mt.reduce((s, t) => s + (t.estimatedHours || 0), 0);
@@ -210,11 +211,10 @@ function invalidateContextCache(projectId) {
 }
 
 function hasEnoughData(context) {
-  return (
-    context.sprints.total > 0 &&
-    context.sprints.active !== null &&
-    context.sprints.active.totalTickets > 0
-  );
+  const hasTickets =
+    (context.sprints.active?.totalTickets ?? 0) > 0 ||
+    context.sprints.completed.some((s) => s.totalTickets > 0);
+  return context.sprints.total > 0 && hasTickets;
 }
 
 module.exports = { buildAiContext, invalidateContextCache, hasEnoughData };

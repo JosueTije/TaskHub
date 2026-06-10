@@ -1,6 +1,7 @@
 const { PDFParse }    = require("pdf-parse");
 const prisma          = require("../config/prisma");
 const { callGroqJson } = require("../services/groq.service");
+const { getIO }       = require("../config/socket");
 
 // ── Developer workload query ──────────────────────────────────────────────────
 
@@ -248,6 +249,15 @@ async function confirmSrs(req, res) {
         });
       })
     );
+
+    try {
+      const io = getIO();
+      if (io) {
+        created.forEach((ticket) => {
+          io.to(`project:${ticket.projectId}`).emit("ticket:created", { ticket });
+        });
+      }
+    } catch {}
 
     return res.status(201).json({ created: created.length, tickets: created });
   } catch (err) {
