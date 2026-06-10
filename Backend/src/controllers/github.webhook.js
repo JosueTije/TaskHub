@@ -2,6 +2,11 @@ const crypto = require("crypto");
 const prisma = require("../config/prisma");
 const { clearLeaderboardCache } = require("../services/gamification.service");
 const { createNotification } = require("../services/notification.service");
+const { getIO } = require("../config/socket");
+
+function emitTicketUpdate(ticket) {
+  try { getIO()?.to(`project:${ticket.projectId}`).emit("ticket:updated", { ticket }); } catch {}
+}
 
 // ── Verificación de firma ──────────────────────────────────────────────────
 // GitHub envía el header X-Hub-Signature-256 calculado con HMAC-SHA256 sobre
@@ -86,7 +91,7 @@ async function githubWebhookController(req, res) {
         );
       }
 
-      await prisma.ticket.update({
+      const updatedReview = await prisma.ticket.update({
         where: { id: ticket.id },
         data: {
           status: "IN_REVIEW",
@@ -95,6 +100,7 @@ async function githubWebhookController(req, res) {
           githubPrStatus: "open",
         },
       });
+      emitTicketUpdate(updatedReview);
 
       console.log(
         `[GitHub Webhook] Ticket ${ticket.id} → IN_REVIEW (PR #${pr.number} abierto)`
@@ -118,7 +124,7 @@ async function githubWebhookController(req, res) {
 
       if (pr.merged) {
         // PR aprobado y mergeado → ticket Completado
-        await prisma.ticket.update({
+        const updatedDone = await prisma.ticket.update({
           where: { id: ticket.id },
           data: {
             status: "DONE",
@@ -126,6 +132,7 @@ async function githubWebhookController(req, res) {
             completedAt: new Date(),
           },
         });
+        emitTicketUpdate(updatedDone);
 
         // Invalidar caché del leaderboard para que los puntos se recalculen
         clearLeaderboardCache();
@@ -148,13 +155,14 @@ async function githubWebhookController(req, res) {
         );
       } else {
         // PR cerrado sin merge → ticket vuelve a En Progreso
-        await prisma.ticket.update({
+        const updatedProgress = await prisma.ticket.update({
           where: { id: ticket.id },
           data: {
             status: "IN_PROGRESS",
             githubPrStatus: "closed",
           },
         });
+        emitTicketUpdate(updatedProgress);
 
         console.log(
           `[GitHub Webhook] Ticket ${ticket.id} → IN_PROGRESS (PR #${pr.number} rechazado)`
