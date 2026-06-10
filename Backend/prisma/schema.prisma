@@ -61,6 +61,9 @@ model Project {
   updatedAt     DateTime        @updatedAt
   archivedAt    DateTime?
 
+  githubRepo       String?
+  githubRepoUrl    String?
+
   createdBy     User            @relation("CreatedProjects", fields: [createdById], references: [id])
   pm            User?           @relation("ManagedProjects", fields: [pmId], references: [id])
   members       ProjectMember[]
@@ -97,6 +100,8 @@ model Sprint {
   createdAt   DateTime     @default(now())
   updatedAt   DateTime     @updatedAt
 
+  githubBranch     String?
+
   project     Project      @relation(fields: [projectId], references: [id], onDelete: Cascade)
   tickets     Ticket[]
 
@@ -130,6 +135,13 @@ model Ticket {
   estimatedHours Float?
   actualHours    Float?
 
+  githubBranch     String?
+  githubPrNumber   Int?
+  githubPrUrl      String?
+  githubPrStatus   String?
+
+  embedding      Unsupported("vector(768)")?
+
   createdAt      DateTime      @default(now())
   updatedAt      DateTime      @updatedAt
 
@@ -149,6 +161,40 @@ model Ticket {
   @@index([startDate])
   @@index([dueDate])
   @@index([completedAt])
+}
+
+model GamificationEvent {
+  id           String   @id @default(uuid())
+  ticketId     String   @unique
+  userId       String
+  projectId    String
+  points       Int
+  priority     String
+  storyPoints  Int?
+  estimatedHours Float?
+  actualHours  Float?
+  precision    Boolean
+  createdAt    DateTime @default(now())
+
+  @@index([userId])
+  @@index([projectId])
+}
+
+model ActivityLog {
+  id          String   @id @default(uuid())
+  projectId   String
+  userId      String
+  userFullName String
+  entityType  String
+  entityId    String
+  entityTitle String?
+  action      String
+  metadata    Json?
+  createdAt   DateTime @default(now())
+
+  @@index([projectId])
+  @@index([userId])
+  @@index([createdAt])
 }
 
 model Notification {

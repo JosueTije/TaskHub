@@ -7,6 +7,9 @@ const {
   deleteTicket,
 } = require("../services/ticket.service");
 const { createNotification, notifyProjectAdminsAndPMs } = require("../services/notification.service");
+const { logActivity } = require("../services/activity.service");
+const prisma = require("../config/prisma");
+const githubService = require("../services/github.service");
 
 function ticketErrorStatus(msg = "") {
   if (msg.includes("Rol no autorizado") || msg.includes("No tienes permisos")) return 403;
@@ -23,7 +26,7 @@ async function createTicketController(req, res) {
   try {
     const { sprintId } = req.params;
 
-    const ticket = await createTicket({
+    const { ticket, capacityWarning } = await createTicket({
       sprintId,
       ...req.body,
       userId: req.user.sub,
@@ -40,9 +43,20 @@ async function createTicketController(req, res) {
       }).catch(() => {});
     }
 
+    logActivity({
+      projectId: ticket.projectId,
+      userId: req.user.sub,
+      userFullName: req.user.email || req.user.sub,
+      entityType: "ticket",
+      entityId: ticket.id,
+      entityTitle: ticket.title,
+      action: "created",
+    }).catch(() => {});
+
     return res.status(201).json({
       message: "Ticket creado correctamente",
       ticket,
+      capacityWarning,
     });
   } catch (error) {
     return res.status(ticketErrorStatus(error.message)).json({
@@ -91,16 +105,27 @@ async function updateTicketController(req, res) {
   try {
     const { id } = req.params;
 
-    const ticket = await updateTicket({
+    const { ticket, capacityWarning } = await updateTicket({
       ticketId: id,
       ...req.body,
       userId: req.user.sub,
       role: req.user.role,
     });
 
+    logActivity({
+      projectId: ticket.projectId,
+      userId: req.user.sub,
+      userFullName: req.user.email || req.user.sub,
+      entityType: "ticket",
+      entityId: ticket.id,
+      entityTitle: ticket.title,
+      action: "updated",
+    }).catch(() => {});
+
     return res.status(200).json({
       message: "Ticket actualizado correctamente",
       ticket,
+      capacityWarning,
     });
   } catch (error) {
     return res.status(ticketErrorStatus(error.message)).json({
@@ -141,6 +166,73 @@ async function updateTicketStatusController(req, res) {
         excludeUserId: req.user.sub,
       }).catch(() => {});
     }
+
+    // GitHub integration: crear rama del ticket al mover a IN_PROGRESS.
+    // Si la rama del sprint no existe en la DB (sprint creado sin conexión),
+    // se intenta crearla primero (Caso 4).
+    if (status === "IN_PROGRESS" && !ticket.githubBranch) {
+      try {
+        const sprintWithProject = await prisma.sprint.findUnique({
+          where: { id: ticket.sprintId },
+          include: { project: { select: { githubRepo: true } } },
+        });
+
+        if (sprintWithProject?.project?.githubRepo) {
+          let sprintBranch = sprintWithProject.githubBranch;
+
+          // Caso 4: la rama del sprint no existe en la DB
+          if (!sprintBranch) {
+            try {
+              const sprintCount = await prisma.sprint.count({
+                where: { projectId: sprintWithProject.projectId },
+              });
+              sprintBranch = await githubService.createSprintBranch(
+                sprintWithProject.project.githubRepo,
+                sprintCount,
+                sprintWithProject.name
+              );
+              await prisma.sprint.update({
+                where: { id: ticket.sprintId },
+                data: { githubBranch: sprintBranch },
+              });
+            } catch (sprintError) {
+              console.error(
+                "[GitHub] No se pudo crear la rama del sprint:",
+                sprintError.message
+              );
+              sprintBranch = null;
+            }
+          }
+
+          if (sprintBranch) {
+            const ticketBranch = await githubService.createTicketBranch(
+              sprintWithProject.project.githubRepo,
+              sprintBranch,
+              ticket.id,
+              ticket.title
+            );
+            await prisma.ticket.update({
+              where: { id: ticket.id },
+              data: { githubBranch: ticketBranch },
+            });
+            ticket.githubBranch = ticketBranch;
+          }
+        }
+      } catch (ghError) {
+        console.error("[GitHub] Error al crear rama del ticket:", ghError.message);
+      }
+    }
+
+    logActivity({
+      projectId: ticket.projectId,
+      userId: req.user.sub,
+      userFullName: req.user.email || req.user.sub,
+      entityType: "ticket",
+      entityId: ticket.id,
+      entityTitle: ticket.title,
+      action: `status_changed_to_${status.toLowerCase()}`,
+      metadata: { status },
+    }).catch(() => {});
 
     return res.status(200).json({
       message: "Estado del ticket actualizado correctamente",

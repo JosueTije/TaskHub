@@ -151,7 +151,7 @@ const hasWorkStarted = completedStoryPoints > 0;
 const spi =
   hasWorkStarted && plannedProgress > 0
     ? Number((progress / plannedProgress).toFixed(2))
-    : 1;
+    : null;
 
   // ===============================
   // Risk
@@ -510,7 +510,80 @@ async function getProjectMetrics({ projectId, userId, role }) {
   };
 }
 
+async function getSprintKpis({ projectId, sprintId, userId, role }) {
+  await checkProjectAccess({ projectId, userId, role });
+
+  const sprint = await prisma.sprint.findUnique({
+    where: { id: sprintId },
+    include: {
+      tickets: {
+        select: {
+          id: true,
+          status: true,
+          storyPoints: true,
+          estimatedHours: true,
+          actualHours: true,
+          dueDate: true,
+        },
+      },
+    },
+  });
+
+  if (!sprint || sprint.projectId !== projectId) {
+    throw new Error("Sprint no encontrado en este proyecto");
+  }
+
+  const tickets = sprint.tickets.filter((t) => t.status !== "CANCELLED");
+  const doneTickets = tickets.filter((t) => t.status === "DONE");
+
+  const totalSP = tickets.reduce((s, t) => s + (t.storyPoints || 0), 0);
+  const doneSP = doneTickets.reduce((s, t) => s + (t.storyPoints || 0), 0);
+  const progress = totalSP > 0 ? Math.round((doneSP / totalSP) * 100) : tickets.length > 0 ? Math.round((doneTickets.length / tickets.length) * 100) : 0;
+
+  const today = new Date();
+  const start = new Date(sprint.startDate);
+  const end = new Date(sprint.endDate);
+  const totalDays = Math.max(1, Math.ceil((end - start) / 86400000));
+  const elapsedDays = Math.ceil((today - start) / 86400000);
+  const plannedProgress = clamp(Math.round((elapsedDays / totalDays) * 100), 0, 100);
+
+  const hasWorkStarted = doneSP > 0 || doneTickets.length > 0;
+  const spi = hasWorkStarted && plannedProgress > 0
+    ? Number((progress / plannedProgress).toFixed(2))
+    : null;
+
+  const scheduleVariance = tickets.length === 0 ? null : progress - plannedProgress;
+
+  const estimatedHours = tickets.reduce((s, t) => s + (t.estimatedHours || 0), 0);
+  const actualHours = doneTickets.reduce((s, t) => s + (t.actualHours || 0), 0);
+  const efficiency = actualHours > 0 ? Number((estimatedHours / actualHours).toFixed(2)) : null;
+
+  const blocked = tickets.filter((t) => t.status === "BLOCKED").length;
+  const delayed = tickets.filter((t) => {
+    if (!t.dueDate) return false;
+    return new Date(t.dueDate) < today && !["DONE", "CANCELLED"].includes(t.status);
+  }).length;
+
+  return {
+    sprintId,
+    sprintName: sprint.name,
+    sprintStatus: sprint.status,
+    progress,
+    plannedProgress,
+    spi,
+    scheduleVariance,
+    estimatedHours,
+    actualHours,
+    efficiency,
+    blockedTickets: blocked,
+    delayedMilestones: delayed,
+    totalTickets: tickets.length,
+    doneTickets: doneTickets.length,
+  };
+}
+
 module.exports = {
   getProjectDashboard,
   getProjectMetrics,
+  getSprintKpis,
 };

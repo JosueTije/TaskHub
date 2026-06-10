@@ -1,10 +1,13 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import ReactMarkdown from 'react-markdown';
-import { Sparkles, Send, Loader2, User, Bot, AlertTriangle, BarChart3, TrendingUp, Users, FileText, Trash2, Search, ChevronDown } from 'lucide-react';
+import { Sparkles, Send, Loader2, User, Bot, AlertTriangle, BarChart3, TrendingUp, Users, FileText, Trash2, Search, ChevronDown, FileDown, ShieldAlert, X } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Header } from '../components/Header';
+import { RiskAnalysisModal } from '../components/RiskAnalysisModal';
 import { authFetch } from '../../services/api';
 import { useAuth } from '../contexts/AuthContext';
+import { useExecutiveSummary } from '../../hooks/useExecutiveSummary';
+import { useRiskAnalysis } from '../../hooks/useRiskAnalysis';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -79,10 +82,19 @@ export function AIAssistant() {
   const [projectSearch, setProjectSearch] = useState('');
   const [projectDropdownOpen, setProjectDropdownOpen] = useState(false);
   const [hasActiveSprint, setHasActiveSprint] = useState(false);
+  const [riskModalOpen, setRiskModalOpen] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const abortRef = useRef<AbortController | null>(null);
   const initializedRef = useRef(false);
+
+  const summary = useExecutiveSummary(selectedId);
+  const risk = useRiskAnalysis(selectedId);
+
+  // Open risk modal automatically when analysis data arrives
+  useEffect(() => {
+    if (risk.data && !risk.isAnalyzing) setRiskModalOpen(true);
+  }, [risk.data, risk.isAnalyzing]);
 
   const colors = {
     bg: theme === 'dark' ? 'bg-[#0F0F0F]' : 'bg-[#F6F2EA]',
@@ -228,7 +240,7 @@ export function AIAssistant() {
       setMessages((prev) =>
         prev.map((m) =>
           m.id === assistantId
-            ? { ...m, content: '⚠️ No se pudo conectar. ¿Está Ollama corriendo?', streaming: false }
+            ? { ...m, content: '⚠️ No se pudo conectar. El servicio de IA no está disponible.', streaming: false }
             : m
         )
       );
@@ -268,6 +280,8 @@ export function AIAssistant() {
     setSelectedId(id);
     setMessages(loadHistory(id));
     setHasActiveSprint(false);
+    setRiskModalOpen(false);
+    risk.clear();
   };
 
   const allOptions = [
@@ -326,6 +340,61 @@ export function AIAssistant() {
               </div>
             )}
           </div>
+
+          {/* ── AI action buttons ─────────────────────────────────────── */}
+          {selectedId && (
+            <div className="flex items-center gap-2 flex-shrink-0 ml-auto">
+              {/* Executive Summary */}
+              <button
+                disabled={summary.isGenerating}
+                onClick={summary.generate}
+                title="Descargar resumen ejecutivo en PDF"
+                className={`flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg border transition-all disabled:opacity-50 disabled:cursor-not-allowed ${
+                  summary.isGenerating
+                    ? `${colors.cardDark} ${colors.border} ${colors.textMuted}`
+                    : `${colors.cardDark} ${colors.border} ${colors.textMuted} hover:border-[#FF3B30]/40 hover:text-[#FF3B30]`
+                }`}
+              >
+                {summary.isGenerating ? (
+                  <><Loader2 className="w-3.5 h-3.5 animate-spin" />{summary.progressMessage || 'Generando PDF...'}</>
+                ) : (
+                  <><FileText className="w-3.5 h-3.5" />Resumen ejecutivo<FileDown className="w-3 h-3" /></>
+                )}
+              </button>
+
+              {/* Risk Analysis */}
+              <button
+                disabled={risk.isAnalyzing}
+                onClick={risk.data ? () => setRiskModalOpen(true) : risk.analyze}
+                title="Analizar riesgos del proyecto"
+                className={`flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg border transition-all disabled:opacity-50 disabled:cursor-not-allowed ${
+                  risk.isAnalyzing
+                    ? `${colors.cardDark} ${colors.border} ${colors.textMuted}`
+                    : `${colors.cardDark} ${colors.border} ${colors.textMuted} hover:border-[#FF9F0A]/40 hover:text-[#FF9F0A]`
+                }`}
+              >
+                {risk.isAnalyzing ? (
+                  <><Loader2 className="w-3.5 h-3.5 animate-spin" />Analizando...</>
+                ) : (
+                  <><ShieldAlert className="w-3.5 h-3.5" />Análisis de riesgo</>
+                )}
+              </button>
+            </div>
+          )}
+
+          {/* Error toasts */}
+          {summary.error && (
+            <div className="w-full mt-1 px-3 py-2 bg-[#FF3B30]/10 border border-[#FF3B30]/20 rounded-lg flex items-center justify-between gap-2">
+              <p className="text-xs text-[#FF3B30]">{summary.error}</p>
+              <button onClick={summary.clearError} className="text-[#FF3B30] hover:opacity-70"><X className="w-3.5 h-3.5" /></button>
+            </div>
+          )}
+          {risk.error && (
+            <div className="w-full mt-1 px-3 py-2 bg-[#FF9F0A]/10 border border-[#FF9F0A]/20 rounded-lg flex items-center justify-between gap-2">
+              <p className="text-xs text-[#FF9F0A]">{risk.error}</p>
+              <button onClick={risk.clearError} className="text-[#FF9F0A] hover:opacity-70"><X className="w-3.5 h-3.5" /></button>
+            </div>
+          )}
 
           {messages.length > 0 && (
             <button
@@ -449,11 +518,24 @@ export function AIAssistant() {
               </button>
             </form>
             <p className={`text-[10px] ${colors.textMuted} mt-1.5 text-center`}>
-              Powered by Ollama · {import.meta.env.VITE_OLLAMA_MODEL ?? 'llama3.2'} · Las respuestas se basan en datos reales del proyecto
+              Powered by Groq · llama-3.1-8b-instant · Las respuestas se basan en datos reales del proyecto
             </p>
           </div>
         </div>
       </div>
+
+      {/* Risk Analysis Modal */}
+      {riskModalOpen && risk.data && (
+        <RiskAnalysisModal
+          projectName={selectedProject?.name ?? ''}
+          data={risk.data}
+          generatedAt={risk.generatedAt}
+          isDownloadingPdf={risk.isDownloadingPdf}
+          onDownloadPdf={risk.downloadPdf}
+          onClose={() => setRiskModalOpen(false)}
+          theme={theme}
+        />
+      )}
     </div>
   );
 }

@@ -21,6 +21,10 @@ interface Ticket {
   dueDate?: string | null;
   startedAt?: string | null;
   completedAt?: string | null;
+  githubBranch?: string | null;
+  githubPrNumber?: number | null;
+  githubPrUrl?: string | null;
+  githubPrStatus?: string | null;
 }
 
 interface Comment {
@@ -362,6 +366,55 @@ export function TicketDetailModal({
                 <p className="text-white">{formatDate(ticket.completedAt)}</p>
               </div>
             </div>
+
+            {(ticket.githubBranch || ticket.githubPrUrl) && (
+              <div className="bg-[#0F0F0F] border border-white/10 rounded-lg p-4 space-y-3">
+                <div className="flex items-center gap-2">
+                  <GitBranch className="w-4 h-4 text-[#8E8E93]" />
+                  <span className="text-sm font-medium text-white">GitHub</span>
+                  {ticket.githubPrStatus === 'open' && (
+                    <span className="ml-auto text-[10px] font-semibold px-2 py-0.5 rounded-full bg-yellow-500/20 text-yellow-400 border border-yellow-500/30">
+                      En revisión
+                    </span>
+                  )}
+                  {ticket.githubPrStatus === 'merged' && (
+                    <span className="ml-auto text-[10px] font-semibold px-2 py-0.5 rounded-full bg-purple-500/20 text-purple-400 border border-purple-500/30">
+                      Mergeado
+                    </span>
+                  )}
+                  {ticket.githubPrStatus === 'closed' && (
+                    <span className="ml-auto text-[10px] font-semibold px-2 py-0.5 rounded-full bg-red-500/20 text-red-400 border border-red-500/30">
+                      Cerrado
+                    </span>
+                  )}
+                </div>
+
+                {ticket.githubBranch && (
+                  <div className="flex items-center gap-2 bg-[#1C1C1E] rounded px-3 py-2">
+                    <GitBranch className="w-3 h-3 text-[#8E8E93] shrink-0" />
+                    <span className="text-xs font-mono text-[#8E8E93] truncate">{ticket.githubBranch}</span>
+                  </div>
+                )}
+
+                {ticket.githubPrUrl && ticket.githubPrNumber && (
+                  <a
+                    href={ticket.githubPrUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className={`flex items-center justify-between w-full px-3 py-2 rounded border text-xs font-medium transition-colors ${
+                      ticket.githubPrStatus === 'merged'
+                        ? 'bg-purple-500/10 border-purple-500/30 text-purple-400 hover:bg-purple-500/20'
+                        : ticket.githubPrStatus === 'closed'
+                        ? 'bg-red-500/10 border-red-500/30 text-red-400 hover:bg-red-500/20'
+                        : 'bg-yellow-500/10 border-yellow-500/30 text-yellow-400 hover:bg-yellow-500/20'
+                    }`}
+                  >
+                    <span>Pull Request #{ticket.githubPrNumber}</span>
+                    <span className="text-[10px] opacity-70">Ver en GitHub →</span>
+                  </a>
+                )}
+              </div>
+            )}
 
             <div>
               <label className="text-xs text-[#8E8E93] mb-2 block">Descripción</label>

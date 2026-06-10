@@ -11,7 +11,7 @@ async function buildProjectContext(projectId, userId, role) {
     return "No hay un proyecto seleccionado. Responde preguntas generales sobre gestión de proyectos.";
   }
 
-  const [project, sprints, tickets, members] = await Promise.all([
+  const [project, sprints, members] = await Promise.all([
     prisma.project.findUnique({
       where: { id: projectId },
       include: { pm: { select: { fullName: true } } },
@@ -19,10 +19,6 @@ async function buildProjectContext(projectId, userId, role) {
     prisma.sprint.findMany({
       where: { projectId },
       orderBy: { startDate: "asc" },
-    }),
-    prisma.ticket.findMany({
-      where: { projectId },
-      include: { assignedTo: { select: { fullName: true } } },
     }),
     prisma.projectMember.findMany({
       where: { projectId, leftAt: null },
@@ -38,42 +34,43 @@ async function buildProjectContext(projectId, userId, role) {
     if (!isMember && !isOwner) throw new Error("No tienes acceso a este proyecto");
   }
 
-  const today = new Date();
+  // Aggregated stats — avoids loading all tickets into memory
+  const [statusCounts, totalSPRow, doneSPRow, delayedCount] = await Promise.all([
+    prisma.ticket.groupBy({
+      by: ["status"],
+      where: { projectId },
+      _count: { id: true },
+    }),
+    prisma.ticket.aggregate({
+      where: { projectId },
+      _sum: { storyPoints: true },
+    }),
+    prisma.ticket.aggregate({
+      where: { projectId, status: "DONE" },
+      _sum: { storyPoints: true },
+    }),
+    prisma.ticket.count({
+      where: {
+        projectId,
+        dueDate: { lt: new Date() },
+        status: { notIn: ["DONE", "CANCELLED"] },
+      },
+    }),
+  ]);
 
-  const totalSP = tickets.reduce((s, t) => s + (t.storyPoints || 0), 0);
-  const doneSP = tickets
-    .filter((t) => t.status === "DONE")
-    .reduce((s, t) => s + (t.storyPoints || 0), 0);
-  const progress = totalSP ? Math.round((doneSP / totalSP) * 100) : 0;
-
-  const blocked = tickets.filter((t) => t.status === "BLOCKED");
-  const delayed = tickets.filter(
-    (t) => t.dueDate && new Date(t.dueDate) < today && !["DONE", "CANCELLED"].includes(t.status)
+  const countByStatus = Object.fromEntries(
+    statusCounts.map((r) => [r.status, r._count.id])
   );
-  const inProgress = tickets.filter((t) => ["IN_PROGRESS", "IN_REVIEW"].includes(t.status));
+  const totalSP  = totalSPRow._sum.storyPoints ?? 0;
+  const doneSP   = doneSPRow._sum.storyPoints ?? 0;
+  const progress = totalSP ? Math.round((doneSP / totalSP) * 100) : 0;
+  const totalTickets = Object.values(countByStatus).reduce((a, b) => a + b, 0);
 
   const activeSprint = sprints.find((s) => s.status === "ACTIVE");
-  const activeTickets = activeSprint
-    ? tickets.filter((t) => t.sprintId === activeSprint.id)
-    : [];
 
   const memberList = members
     .filter((m) => m.user)
-    .map((m) => {
-      const mt = tickets.filter((t) => t.assignedToId === m.userId);
-      const done = mt.filter((t) => t.status === "DONE").length;
-      return `  - ${sanitize(m.user.fullName)} (${m.user.role}): ${mt.length} tickets asignados, ${done} completados`;
-    })
-    .join("\n");
-
-  const blockedList = blocked
-    .slice(0, 5)
-    .map((t) => `  - [${t.priority}] ${sanitize(t.title)}${t.assignedTo ? ` → ${sanitize(t.assignedTo.fullName)}` : ""}`)
-    .join("\n");
-
-  const inProgressList = inProgress
-    .slice(0, 5)
-    .map((t) => `  - [${t.priority}] ${sanitize(t.title)}${t.assignedTo ? ` → ${sanitize(t.assignedTo.fullName)}` : ""}`)
+    .map((m) => `  - ${sanitize(m.user.fullName)} (${m.user.role})`)
     .join("\n");
 
   const riskLabel = RISK_LABELS[project.riskLevel] ?? project.riskLevel;
@@ -82,30 +79,18 @@ async function buildProjectContext(projectId, userId, role) {
 
 ## Proyecto: ${sanitize(project.name)}
 PM: ${project.pm ? sanitize(project.pm.fullName) : "Sin asignar"}
-Estado: ${project.status} | Riesgo oficial: ${riskLabel} | Tickets bloqueados: ${blocked.length}
+Estado: ${project.status} | Riesgo: ${riskLabel}
 Fechas: ${project.startDate ? new Date(project.startDate).toLocaleDateString("es") : "N/D"} → ${project.targetEndDate ? new Date(project.targetEndDate).toLocaleDateString("es") : "N/D"}
 Progreso: ${progress}% (${doneSP}/${totalSP} story points completados)
-Tickets totales: ${tickets.length} | Bloqueados: ${blocked.length} | Retrasados: ${delayed.length}
+Tickets: ${totalTickets} total | TODO: ${countByStatus.TODO ?? 0} | En progreso: ${(countByStatus.IN_PROGRESS ?? 0) + (countByStatus.IN_REVIEW ?? 0)} | Bloqueados: ${countByStatus.BLOCKED ?? 0} | Retrasados: ${delayedCount} | Completados: ${countByStatus.DONE ?? 0}
 
 ## Sprint activo: ${activeSprint ? sanitize(activeSprint.name) : "Ninguno"}
-${
-  activeSprint
-    ? `Tickets en este sprint: ${activeTickets.length}
-Completados: ${activeTickets.filter((t) => t.status === "DONE").length}
-En progreso: ${activeTickets.filter((t) => ["IN_PROGRESS", "IN_REVIEW"].includes(t.status)).length}
-Bloqueados: ${activeTickets.filter((t) => t.status === "BLOCKED").length}`
-    : ""
-}
+${activeSprint?.goal ? `Objetivo: ${sanitize(activeSprint.goal)}` : ""}
 
 ## Equipo (${members.length} personas):
 ${memberList || "  Sin miembros registrados"}
 
-## Tickets en progreso:
-${inProgressList || "  Ninguno"}
-
-## Tickets bloqueados:
-${blockedList || "  Ninguno"}
-
+(Los tickets específicos relevantes a la pregunta se muestran a continuación.)
 --- FIN DATOS DEL PROYECTO ---`;
 }
 

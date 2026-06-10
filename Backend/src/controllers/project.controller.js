@@ -9,6 +9,8 @@ const {
   getArchivedProjects,
   getArchivedProjectHistory,
 } = require("../services/project.service");
+const prisma = require("../config/prisma");
+const githubService = require("../services/github.service");
 
 async function addProjectMemberController(req, res) {
   try {
@@ -60,6 +62,27 @@ async function createProjectController(req, res) {
       creatorRole: req.user.role,
     });
 
+    // GitHub integration: crear repositorio de forma no bloqueante.
+    // Si GitHub falla el proyecto igual queda creado; el repo se puede
+    // conectar manualmente desde el botón "Conectar a GitHub" en la UI.
+    try {
+      const ghResult = await githubService.createRepository(
+        project.name,
+        project.description
+      );
+      const updated = await prisma.project.update({
+        where: { id: project.id },
+        data: {
+          githubRepo: ghResult.repoName,
+          githubRepoUrl: ghResult.repoUrl,
+        },
+      });
+      project.githubRepo = updated.githubRepo;
+      project.githubRepoUrl = updated.githubRepoUrl;
+    } catch (ghError) {
+      console.error("[GitHub] Error al crear repositorio:", ghError.message);
+    }
+
     return res.status(201).json({
       message: "Proyecto creado correctamente",
       project,
@@ -67,6 +90,43 @@ async function createProjectController(req, res) {
   } catch (error) {
     return res.status(400).json({
       message: error.message || "Error al crear proyecto",
+    });
+  }
+}
+
+// Endpoint manual para conectar un proyecto a GitHub cuando la creación
+// automática falló (GitHub estaba caído o hubo un error de red).
+async function setupProjectGithubController(req, res) {
+  try {
+    const { projectId } = req.params;
+
+    const project = await prisma.project.findUnique({
+      where: { id: projectId },
+    });
+    if (!project) {
+      return res.status(404).json({ message: "Proyecto no encontrado" });
+    }
+
+    const ghResult = await githubService.createRepository(
+      project.name,
+      project.description
+    );
+
+    const updated = await prisma.project.update({
+      where: { id: projectId },
+      data: {
+        githubRepo: ghResult.repoName,
+        githubRepoUrl: ghResult.repoUrl,
+      },
+    });
+
+    return res.status(200).json({
+      message: "Repositorio conectado correctamente",
+      project: updated,
+    });
+  } catch (error) {
+    return res.status(500).json({
+      message: error.message || "Error al conectar con GitHub",
     });
   }
 }
@@ -197,4 +257,5 @@ module.exports = {
   removeProjectMemberController,
   getArchivedProjectsController,
   getArchivedProjectHistoryController,
+  setupProjectGithubController,
 };

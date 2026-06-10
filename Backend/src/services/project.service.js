@@ -254,6 +254,8 @@ async function getProjects({ userId, role }) {
     pm: project.pm,
     createdBy: project.createdBy,
     members: project.members.map((member) => member.user),
+    githubRepo: project.githubRepo ?? null,
+    githubRepoUrl: project.githubRepoUrl ?? null,
     stats: {
       membersCount: project._count.members,
       sprintsCount: project._count.sprints,
@@ -407,6 +409,8 @@ function formatProject(project) {
     pm: project.pm,
     createdBy: project.createdBy,
     members: project.members.map((m) => m.user),
+    githubRepo: project.githubRepo ?? null,
+    githubRepoUrl: project.githubRepoUrl ?? null,
     stats: {
       membersCount: project._count.members,
       sprintsCount: project._count.sprints,

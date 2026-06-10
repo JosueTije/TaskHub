@@ -21,6 +21,7 @@ export const mapBackendSprintToUi = (sprint: any) => ({
   endDate: sprint.endDate,
   completedAt: sprint.completedAt || null,
   capacity: sprint.capacity,
+  githubBranch: sprint.githubBranch ?? null,
 });
 
 export const mapBackendTicketToUi = (ticket: any) => ({
@@ -71,6 +72,11 @@ export const mapBackendTicketToUi = (ticket: any) => ({
   updatedAt: ticket.updatedAt || null,
 
   endDate: ticket.completedAt || ticket.dueDate || null,
+
+  githubBranch: ticket.githubBranch ?? null,
+  githubPrNumber: ticket.githubPrNumber ?? null,
+  githubPrUrl: ticket.githubPrUrl ?? null,
+  githubPrStatus: ticket.githubPrStatus ?? null,
 });
 
 export const formatBackendStatus = (status?: string) => {

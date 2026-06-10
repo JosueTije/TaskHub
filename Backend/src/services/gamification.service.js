@@ -220,7 +220,7 @@ async function getLeaderboard() {
     return entry;
   });
 
-  const result = { developers: developers.slice(0, 20), topProjects: topProjects.slice(0, 3), weeklyTrend };
+  const result = { developers: developers.slice(0, 20), topProjects, weeklyTrend };
   _leaderboardCache = result;
   _leaderboardExpiry = Date.now() + LEADERBOARD_TTL_MS;
   return result;

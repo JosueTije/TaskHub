@@ -32,6 +32,7 @@ interface AuthContextType {
   resendOTP: () => Promise<{ success: boolean; error?: string }>;
   pendingEmail: string | null;
   isAuthenticated: boolean;
+  isLoading: boolean;
   theme: 'dark' | 'light';
   setTheme: (theme: 'dark' | 'light') => void;
   toggleTheme: () => void;
@@ -44,6 +45,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [user, setUser] = useState<User | null>(null);
   const [theme, setTheme] = useState<'dark' | 'light'>('dark');
   const [pendingEmail, setPendingEmail] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
     try {
@@ -74,6 +76,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       localStorage.removeItem('taskhub_pending_email');
       localStorage.removeItem('taskhub_otp_token');
       localStorage.removeItem('setupPasswordToken');
+    } finally {
+      setIsLoading(false);
     }
   }, []);
 
@@ -300,6 +304,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         resendOTP,
         pendingEmail,
         isAuthenticated: !!user,
+        isLoading,
         theme,
         setTheme,
         toggleTheme,

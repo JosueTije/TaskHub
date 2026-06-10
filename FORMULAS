@@ -1,0 +1,393 @@
+═══════════════════════════════════════════════════════════════════
+  TASKHUB — FÓRMULAS, KPIs Y MÉTRICAS
+═══════════════════════════════════════════════════════════════════
+
+───────────────────────────────────────────────────────────────────
+  SECCIÓN 1 — ANALYTICS / DASHBOARD KPIs
+  Endpoint: GET /analytics/project/:id/dashboard
+───────────────────────────────────────────────────────────────────
+
+━━━ 1. PROGRESS (% de avance real del proyecto) ━━━━━━━━━━━━━━━━━━
+
+  Caso normal (hay story points definidos):
+    progress = ROUND( completedStoryPoints / totalStoryPoints × 100 )
+
+  Caso fallback (ningún ticket tiene story points):
+    progress = ROUND( cantidadTicketsDONE / cantidadTotalTickets × 100 )
+
+  Caso sin tickets:
+    progress = 0
+
+  Donde:
+    totalStoryPoints     = suma de storyPoints de TODOS los tickets del proyecto
+    completedStoryPoints = suma de storyPoints de tickets con status = DONE
+
+  Resultado: 0 a 100 (porcentaje)
+
+
+━━━ 2. PLANNED PROGRESS (% de avance esperado según fechas) ━━━━━━
+
+  plannedProgress = CLAMP( ROUND( elapsedDays / totalDays × 100 ), 0, 100 )
+
+  Donde:
+    elapsedDays = días entre project.startDate y HOY
+    totalDays   = días entre project.startDate y project.targetEndDate
+    CLAMP       = fuerza el resultado entre 0 y 100
+
+  Resultado: cuánto % del tiempo total ya transcurrió
+
+
+━━━ 3. SCHEDULE VARIANCE (variación respecto al plan) ━━━━━━━━━━━━
+
+  scheduleVariance = progress - plannedProgress
+
+  Interpretación:
+    > 0  → el proyecto va ADELANTADO al plan
+    = 0  → va exactamente a tiempo
+    < 0  → va ATRASADO respecto al plan
+
+  Caso especial: si el proyecto no tiene tickets → scheduleVariance = 0
+
+
+━━━ 4. SPI — Schedule Performance Index ━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  spi = ROUND( progress / plannedProgress, 2 decimales )
+
+  Condición: solo se calcula si ya hay trabajo empezado
+             (completedStoryPoints > 0) Y plannedProgress > 0
+  Si no se cumple: spi = 1 (neutral por defecto)
+
+  Interpretación:
+    >= 1.0      → adelantado o a tiempo
+    0.8 - 1.0   → ligero retraso (riesgo MEDIUM)
+    < 0.8       → retraso significativo (riesgo HIGH)
+
+
+━━━ 5. HOURS VARIANCE (variación de horas) ━━━━━━━━━━━━━━━━━━━━━
+
+  hoursVariance = actualHours - estimatedHours
+
+  IMPORTANTE: solo se usan horas de tickets con status = DONE
+  (no se mezclan con tickets en progreso para no distorsionar)
+
+  Interpretación:
+    > 0  → se tardaron MÁS horas de lo estimado
+    < 0  → se tardaron MENOS horas (fueron más rápidos)
+    = 0  → estimación perfecta
+
+
+━━━ 6. EFFICIENCY (eficiencia del equipo) ━━━━━━━━━━━━━━━━━━━━━━━
+
+  efficiency = ROUND( estimatedHours / actualHours, 2 decimales )
+
+  Solo se calcula si actualHours > 0; si no → null
+  Donde estimatedHours y actualHours son SOLO de tickets DONE
+
+  Interpretación:
+    > 1.0  → terminaron más rápido de lo estimado (eficientes)
+    = 1.0  → estimación exacta
+    < 1.0  → tardaron más de lo estimado
+
+
+━━━ 7. DELAYED TICKETS (tickets retrasados) ━━━━━━━━━━━━━━━━━━━━━
+
+  Un ticket se considera retrasado si:
+    ticket.dueDate < HOY
+    AND ticket.status NOT IN (DONE, CANCELLED)
+
+  delayedTickets = cantidad de tickets que cumplan esa condición
+
+
+━━━ 8. RISK (nivel de riesgo calculado automáticamente) ━━━━━━━━━
+
+  HIGH   si: delayedTickets >= 3  OR  blockedTickets >= 3  OR  spi < 0.8
+  MEDIUM si: delayedTickets >= 1  OR  blockedTickets >= 1  OR  spi < 1.0
+  LOW    en cualquier otro caso
+
+  NOTA: este es el riesgo CALCULADO. El proyecto también tiene
+  officialRiskLevel que es el que el PM asigna manualmente (LOW/MEDIUM/HIGH/CRITICAL).
+
+
+━━━ 9. PROGRESS HISTORY POR SPRINT (gráfico de líneas) ━━━━━━━━━━
+
+  Para cada sprint i (ordenados por fecha de inicio):
+
+    actual[i]  = ROUND( acumuladoSPcompletados / totalStoryPoints × 100 )
+    planned[i] = ROUND( (i + 1) / totalSprints × 100 )
+
+  acumuladoSPcompletados = suma acumulativa de SP completados hasta ese sprint
+                           (incluye todos los sprints anteriores)
+
+  Esto genera dos curvas: la línea REAL vs la línea IDEAL por sprint.
+
+
+━━━ 10. TEAM PERFORMANCE (rendimiento por miembro del equipo) ━━━━
+
+  performance = ROUND( userStoryDone / userStoryTotal × 100 )
+
+  Donde:
+    userStoryTotal = suma de SP de todos los tickets asignados al miembro
+    userStoryDone  = suma de SP de sus tickets con status = DONE
+
+  Si userStoryTotal = 0 → performance = 0
+
+
+───────────────────────────────────────────────────────────────────
+  SECCIÓN 2 — METRICS PAGE (extendida)
+  Endpoint: GET /analytics/project/:id/metrics
+───────────────────────────────────────────────────────────────────
+
+━━━ 11. VELOCITY (velocidad por sprint) ━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  velocity[sprint]   = suma de storyPoints de tickets DONE en ese sprint
+  commitment[sprint] = sprint.capacity (si está definido)
+                       OR suma de SP de todos los tickets del sprint
+
+  Resultado: array por sprint { sprint, velocity, commitment }
+  Sirve para el gráfico de barras de velocidad histórica.
+
+
+━━━ 12. BURNDOWN CHART (por sprint activo) ━━━━━━━━━━━━━━━━━━━━━━
+
+  Por cada día D desde sprint.startDate hasta HOY (o sprint.endDate):
+
+    ideal[D]     = MAX(0, ROUND( totalSP - (totalSP / totalDays) × D ))
+    remaining[D] = MAX(0, totalSP - completedSP_hasta_D)
+    completed[D] = suma de SP de tickets DONE con completedAt <= fin_del_dia_D
+
+  Donde:
+    totalSP    = suma de SP de todos los tickets del sprint
+    totalDays  = días totales del sprint (endDate - startDate)
+    D          = índice del día (0, 1, 2, ...)
+
+  La curva "ideal" baja linealmente; "remaining" baja según trabajo real.
+  Resultado: array { day: "D1", remaining, ideal, completed }
+
+
+━━━ 13. DAYS REMAINING (días restantes del sprint activo) ━━━━━━━
+
+  rawDaysRemaining = CEIL( (sprint.endDate - HOY) / ms_por_dia )
+  daysRemaining    = MAX(0, rawDaysRemaining)
+
+  Si rawDaysRemaining < 0:
+    isExpired   = true
+    daysOverdue = ABS(rawDaysRemaining)
+
+
+━━━ 14. ESTIMATION ACCURACY (precisión de estimación por miembro)
+
+  Se evalúa por cada ticket DONE con estimatedHours y actualHours definidos.
+
+  Un ticket es "preciso" si:
+    actualHours <= estimatedHours × 1.15
+    (se acepta hasta un 15% de desviación sobre la estimación)
+
+  accuracy = ROUND( ticketsPrecisos / ticketsConEstimacion × 100 )
+
+  Si no tiene ningún ticket con estimación → accuracy = null
+
+
+━━━ 15. WEEKLY EVOLUTION (evolución semanal, últimas 4 semanas) ━━
+
+  Se calculan ventanas de 7 días hacia atrás desde HOY:
+
+    weekEnd[i]   = HOY - (3 - i) × 7 días
+    weekStart[i] = weekEnd[i] - 7 días
+
+    tickets[i] = tickets DONE con completedAt en [weekStart[i], weekEnd[i])
+    points[i]  = suma de ticketScore de esos tickets
+
+  Sem 1 = semana más antigua, Sem 4 = semana más reciente
+  Resultado: [ { week: "Sem 1", tickets, points }, ..., { week: "Sem 4" } ]
+
+
+───────────────────────────────────────────────────────────────────
+  SECCIÓN 3 — GAMIFICATION
+  Endpoints: GET /gamification/leaderboard
+             GET /gamification/project/:id
+───────────────────────────────────────────────────────────────────
+
+━━━ 16. TICKET SCORE (puntos por ticket completado) ━━━━━━━━━━━━━
+  Archivo: Backend/src/utils/scoring.js
+
+  score = PRIORITY_POINTS[priority]
+          + (storyPoints × 5)     <- si tiene storyPoints definidos
+          + 5 (bonus)             <- si la estimación fue precisa
+
+  PRIORITY_POINTS:
+    CRITICAL → 50 puntos base
+    HIGH     → 30 puntos base
+    MEDIUM   → 20 puntos base
+    LOW      → 10 puntos base
+
+  Bonus de precisión (+5) se aplica cuando:
+    actualHours <= estimatedHours × 1.15
+    (y ambos campos están definidos en el ticket)
+
+  Ejemplos:
+    HIGH, 2 SP, estimó 4h, tardó 4.5h (4.5 > 4×1.15=4.6) → NO bonus
+    score = 30 + (2×5) + 0 = 40 puntos
+
+    HIGH, 2 SP, estimó 4h, tardó 3h (3 <= 4.6) → SI bonus
+    score = 30 + (2×5) + 5 = 45 puntos
+
+    CRITICAL, 0 SP, sin horas → score = 50 + 0 + 0 = 50 puntos
+
+  NOTA: solo cuentan tickets con status = DONE
+
+
+━━━ 17. TOTAL POINTS (puntos totales de un developer) ━━━━━━━━━━━
+
+  totalPoints = SUMA de ticketScore(t) para cada ticket DONE asignado al dev
+
+
+━━━ 18. BADGES (insignias según puntos acumulados) ━━━━━━━━━━━━━━
+
+  Intermediate →    0 -  299 puntos
+  Advanced     →  300 -  599 puntos
+  Pro          →  600 -  999 puntos
+  Expert       → 1000 - 1499 puntos
+  Master       → 1500 - 1999 puntos
+  Legend       → 2000+ puntos
+
+
+━━━ 19. STREAK (racha de días consecutivos) ━━━━━━━━━━━━━━━━━━━━━
+
+  1. Obtener conjunto de días únicos donde el dev completó al menos un ticket
+     (solo la fecha YYYY-MM-DD de cada ticket.completedAt)
+
+  2. Desde HOY, contar hacia atrás cuántos días consecutivos aparecen en ese set
+
+  3. Al encontrar un día sin completions, detener el conteo
+
+  streak = cantidad de días seguidos desde hoy con al menos 1 ticket DONE
+
+  Ejemplo:
+    Completions: jun-4, jun-3, jun-2, may-31 (falta jun-1)
+    Desde hoy (jun-4): cuenta 4, 3, 2 → se detiene en jun-1 → streak = 3
+
+
+━━━ 20. CONSISTENCY (consistencia en gamification de proyecto) ━━━
+
+  consistency = ROUND( weeksActive / 4 × 100 )
+
+  Donde weeksActive = cuántas de las últimas 4 semanas tuvo al menos
+  un ticket DONE (usando la misma ventana de weekly evolution)
+
+  Posibles valores: 0%, 25%, 50%, 75%, 100%
+
+
+━━━ 21. TREND (tendencia del developer en proyecto) ━━━━━━━━━━━━━
+
+  Se compara la semana más reciente (Sem 4) con la más antigua (Sem 1):
+
+    Si totalEvoPoints === 0         → "neutral"
+    Si Sem4.points >= Sem1.points   → "up"
+    Si Sem4.points <  Sem1.points   → "down"
+
+  totalEvoPoints = suma de puntos de las 4 semanas
+  Si no hubo actividad en ninguna semana → neutral automático
+
+
+━━━ 22. SPRINT WINNER (ganador del sprint activo) ━━━━━━━━━━━━━━━
+
+  currentSprintPoints[dev] = SUMA de ticketScore de tickets DONE
+                             en el sprint activo asignados a ese dev
+
+  Sprint winner = developer con el mayor currentSprintPoints
+  Condicion: solo se declara ganador si currentSprintPoints > 0
+
+  sprintCompletion[dev] = ROUND( misTicketsDone / misTicketsSprint × 100 )
+  (% de sus tickets del sprint activo que ya completó)
+
+
+━━━ 23. PROJECT SCORE (score de proyecto en leaderboard global) ━━
+
+  projectScore = SUMA de ticketScore de todos los tickets DONE del proyecto
+                 (de todos sus sprints combinados)
+
+  completion = ROUND( doneTickets / allTickets × 100 )
+
+  Los proyectos se ordenan de mayor a menor projectScore.
+  Se devuelven los top 3 en el leaderboard global.
+
+
+━━━ 24. LEADERBOARD GLOBAL (ranking de developers) ━━━━━━━━━━━━━━
+
+  Solo incluye developers donde:
+    assignedTo.status = ACTIVE
+    assignedTo.deletedAt = null
+    assignedTo.fullName no contiene "TaskHub" (excluye cuentas de sistema)
+
+  Ordenados por totalPoints descendente → se asigna position = índice + 1
+  Se devuelven los top 20 developers.
+
+  Cache: resultado en memoria con TTL de 5 minutos.
+  Invalidación: al completar cualquier ticket (status → DONE).
+
+
+━━━ 25. WEEKLY TREND DE PROYECTOS (leaderboard global) ━━━━━━━━━━
+
+  Para los top 3 proyectos, misma lógica de ventanas semanales:
+
+    weeklyTrend[semana][projectId] = suma de ticketScore de tickets DONE
+                                     de ese proyecto en esa semana
+
+  Permite comparar visualmente la evolución de los 3 proyectos líderes.
+
+
+───────────────────────────────────────────────────────────────────
+  SECCIÓN 4 — USER METRICS
+  Endpoint: GET /users/:userId/metrics
+───────────────────────────────────────────────────────────────────
+
+━━━ 26. PERFORMANCE DE USUARIO ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  performance = ROUND( completedStoryPoints / totalStoryPoints × 100 )
+
+  Si totalStoryPoints = 0 → performance = 0
+
+  También se devuelve:
+    totalTickets         = todos los tickets asignados
+    completedTickets     = tickets con status = DONE
+    inProgressTickets    = tickets con status = IN_PROGRESS
+    blockedTickets       = tickets con status = BLOCKED
+    totalStoryPoints     = suma de SP de todos sus tickets
+    completedStoryPoints = suma de SP de sus tickets DONE
+    points               = suma de ticketScore de sus tickets DONE
+    sprintsParticipated  = cantidad de sprints distintos con sus tickets
+
+
+───────────────────────────────────────────────────────────────────
+  RESUMEN RÁPIDO — HOJA DE REFERENCIA
+───────────────────────────────────────────────────────────────────
+
+  progress          = completedSP / totalSP × 100
+  plannedProgress   = elapsedDays / totalDays × 100   (clamped 0-100)
+  scheduleVariance  = progress - plannedProgress
+  spi               = progress / plannedProgress       (1 si no hay datos)
+  hoursVariance     = actualHours - estimatedHours     (solo tickets DONE)
+  efficiency        = estimatedHours / actualHours     (solo tickets DONE)
+
+  ticketScore       = priorityPts + (SP × 5) + 5bonus
+  estimationBonus   = actualHours <= estimatedHours × 1.15
+  accuracy          = ticketsPrecisos / ticketsConEst × 100
+  consistency       = weeksActive / 4 × 100
+  streak            = días consecutivos hacia atrás con al menos 1 DONE
+
+  Burndown ideal    = totalSP - (totalSP / totalDays × día)
+  Burndown real     = totalSP - SPcompletados_hasta_ese_día
+  velocity          = SP completados en el sprint
+
+  Risk HIGH         → delayed>=3 OR blocked>=3 OR spi<0.8
+  Risk MEDIUM       → delayed>=1 OR blocked>=1 OR spi<1.0
+  Risk LOW          → cualquier otro caso
+
+  Badge Intermediate →    0-299 pts
+  Badge Advanced     →  300-599 pts
+  Badge Pro          →  600-999 pts
+  Badge Expert       → 1000-1499 pts
+  Badge Master       → 1500-1999 pts
+  Badge Legend       → 2000+ pts
+
+═══════════════════════════════════════════════════════════════════

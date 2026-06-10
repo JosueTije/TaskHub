@@ -27,7 +27,8 @@ import { UserManagement } from './pages/UserManagement';
 import { UserProfile } from './pages/UserProfile';
 
 function RequireRole({ roles, children }: { roles: string[]; children: React.ReactNode }) {
-  const { user } = useAuth();
+  const { user, isLoading } = useAuth();
+  if (isLoading) return null;
   if (!user || !roles.includes(user.role)) return <Navigate to="/dashboard" replace />;
   return <>{children}</>;
 }

@@ -1,6 +1,7 @@
+require("dotenv").config(); // must be first — loads .env before any other module reads process.env
+
 const express = require("express");
 const cors = require("cors");
-const dotenv = require("dotenv");
 const helmet = require("helmet");
 const morgan = require("morgan");
 const cookieParser = require("cookie-parser");
@@ -14,12 +15,12 @@ const analyticsRoutes = require("./routes/analytics.routes");
 const gamificationRoutes = require("./routes/gamification.routes");
 const notificationRoutes = require("./routes/notification.routes");
 const aiRoutes = require("./routes/ai.routes");
-
-dotenv.config();
+const activityRoutes = require("./routes/activity.routes");
+const githubWebhookController = require("./controllers/github.webhook");
 
 const app = express();
 
-app.use(helmet()); //protecciónn !!
+app.use(helmet({ crossOriginResourcePolicy: { policy: "cross-origin" } })); //protecciónn !!
 app.use(
   cors({
     origin: [
@@ -29,6 +30,16 @@ app.use(
     credentials: true,
   })
 );
+
+// ── Webhook de GitHub ──────────────────────────────────────────────────────
+// DEBE ir ANTES de express.json() porque la verificación de firma necesita
+// el body como Buffer crudo, no como JSON parseado.
+app.use(
+  "/webhooks/github",
+  express.raw({ type: "application/json" }),
+  githubWebhookController
+);
+
 app.use(express.json()); // recibir
 app.use(cookieParser()); //leer cookiees
 app.use(morgan("dev")); //request de consolaaa
@@ -49,5 +60,6 @@ app.use("/analytics", analyticsRoutes);
 app.use("/gamification", gamificationRoutes);
 app.use("/notifications", notificationRoutes);
 app.use("/ai", aiRoutes);
+app.use("/", activityRoutes);
 
 module.exports = app;

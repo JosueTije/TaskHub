@@ -1,5 +1,7 @@
 const prisma = require("../config/prisma");
 const { clearLeaderboardCache } = require("./gamification.service");
+const { ticketScore } = require("../utils/scoring");
+const { embedTicket } = require("./rag.service");
 
 async function validateProjectAccess({ projectId, userId, role }) {
   const project = await prisma.project.findFirst({
@@ -85,11 +87,33 @@ async function createTicket({
     throw new Error("El sprint no existe");
   }
 
+  if (sprint.status === "COMPLETED" || sprint.status === "CANCELLED") {
+    throw new Error("No se pueden crear tickets en un sprint cerrado o cancelado");
+  }
+
   await validateProjectAccess({
     projectId: sprint.projectId,
     userId,
     role,
   });
+
+  // Capacity check — non-blocking, returns warning
+  let capacityWarning = null;
+  if (sprint.capacity > 0 && estimatedHours != null && Number(estimatedHours) > 0) {
+    const { _sum } = await prisma.ticket.aggregate({
+      where: { sprintId, status: { not: "CANCELLED" } },
+      _sum: { estimatedHours: true },
+    });
+    const committed = _sum.estimatedHours ?? 0;
+    const newTotal = committed + Number(estimatedHours);
+    if (newTotal > sprint.capacity) {
+      capacityWarning = {
+        committed: newTotal,
+        capacity: sprint.capacity,
+        percentage: Math.round((newTotal / sprint.capacity) * 100),
+      };
+    }
+  }
 
   if (assignedToId) {
     const member = await prisma.projectMember.findFirst({
@@ -180,7 +204,10 @@ async function createTicket({
     },
   });
 
-  return ticket;
+  // fire-and-forget — don't block the response
+  embedTicket(ticket.id);
+
+  return { ticket, capacityWarning };
 }
 
 async function getTicketsBySprint({ sprintId, userId, role }) {
@@ -329,6 +356,27 @@ async function updateTicket({
     }
   }
 
+  // Capacity check on hour change — non-blocking, returns warning
+  let capacityWarning = null;
+  if (estimatedHours !== undefined && estimatedHours !== null) {
+    const sprint = await prisma.sprint.findUnique({ where: { id: ticket.sprintId } });
+    if (sprint && sprint.capacity > 0) {
+      const { _sum } = await prisma.ticket.aggregate({
+        where: { sprintId: ticket.sprintId, status: { not: "CANCELLED" }, id: { not: ticketId } },
+        _sum: { estimatedHours: true },
+      });
+      const othersCommitted = _sum.estimatedHours ?? 0;
+      const newTotal = othersCommitted + Number(estimatedHours);
+      if (newTotal > sprint.capacity) {
+        capacityWarning = {
+          committed: newTotal,
+          capacity: sprint.capacity,
+          percentage: Math.round((newTotal / sprint.capacity) * 100),
+        };
+      }
+    }
+  }
+
   const updatedTicket = await prisma.ticket.update({
     where: {
       id: ticketId,
@@ -395,7 +443,9 @@ async function updateTicket({
     },
   });
 
-  return updatedTicket;
+  embedTicket(updatedTicket.id);
+
+  return { ticket: updatedTicket, capacityWarning };
 }
 
 async function updateTicketStatus({ ticketId, status, actualHours, userId, role }) {
@@ -432,7 +482,6 @@ async function updateTicketStatus({ ticketId, status, actualHours, userId, role 
   const isMovingToDone = status === "DONE";
   const isLeavingDone = ticket.status === "DONE" && status !== "DONE";
 
-  // Invalidate leaderboard cache when points change (ticket completes or un-completes)
   if (isMovingToDone || isLeavingDone) {
     clearLeaderboardCache();
   }
@@ -446,7 +495,7 @@ async function updateTicketStatus({ ticketId, status, actualHours, userId, role 
       startedAt: isMovingToInProgress ? new Date() : ticket.startedAt,
       completedAt: isMovingToDone ? new Date() : isLeavingDone ? null : ticket.completedAt,
       actualHours:
-        actualHours !== undefined && actualHours !== null
+        ["ADMIN", "PM"].includes(role) && actualHours !== undefined && actualHours !== null
           ? Number(actualHours)
           : isLeavingDone
           ? null
@@ -485,6 +534,47 @@ async function updateTicketStatus({ ticketId, status, actualHours, userId, role 
       },
     },
   });
+
+  // GamificationEvent persistence
+  if (isMovingToDone && updatedTicket.assignedToId) {
+    const score = ticketScore(updatedTicket);
+    try {
+      await prisma.gamificationEvent.upsert({
+        where: { ticketId: updatedTicket.id },
+        update: {
+          points: score,
+          priority: updatedTicket.priority,
+          storyPoints: updatedTicket.storyPoints,
+          estimatedHours: updatedTicket.estimatedHours,
+          actualHours: updatedTicket.actualHours,
+          precision: updatedTicket.estimatedHours != null && updatedTicket.actualHours != null
+            ? updatedTicket.actualHours <= updatedTicket.estimatedHours * 1.15
+            : false,
+        },
+        create: {
+          ticketId: updatedTicket.id,
+          userId: updatedTicket.assignedToId,
+          projectId: updatedTicket.projectId,
+          points: score,
+          priority: updatedTicket.priority,
+          storyPoints: updatedTicket.storyPoints,
+          estimatedHours: updatedTicket.estimatedHours,
+          actualHours: updatedTicket.actualHours,
+          precision: updatedTicket.estimatedHours != null && updatedTicket.actualHours != null
+            ? updatedTicket.actualHours <= updatedTicket.estimatedHours * 1.15
+            : false,
+        },
+      });
+    } catch (e) {
+      console.error("[Gamification] upsert failed:", e.message);
+    }
+  } else if (isLeavingDone) {
+    prisma.gamificationEvent.deleteMany({
+      where: { ticketId: updatedTicket.id },
+    }).catch(() => {});
+  }
+
+  embedTicket(updatedTicket.id);
 
   return updatedTicket;
 }
