@@ -495,7 +495,7 @@ async function updateTicketStatus({ ticketId, status, actualHours, userId, role 
       startedAt: isMovingToInProgress ? new Date() : ticket.startedAt,
       completedAt: isMovingToDone ? new Date() : isLeavingDone ? null : ticket.completedAt,
       actualHours:
-        ["ADMIN", "PM"].includes(role) && actualHours !== undefined && actualHours !== null
+        actualHours !== undefined && actualHours !== null && (isMovingToDone || ticket.status === "DONE")
           ? Number(actualHours)
           : isLeavingDone
           ? null
