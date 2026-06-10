@@ -558,12 +558,14 @@ export function Projects() {
                     <TrendingUp className="w-4 h-4 text-green-500" />
                   </motion.div>
                 </div>
-                <p className={`text-3xl font-bold ${colors.textPrimary} mb-1 relative z-10`}>{totalProjects}</p>
+                <p className={`text-3xl font-bold ${colors.textPrimary} mb-1 relative z-10`}>
+                  {isLoadingProjects ? '—' : totalProjects}
+                </p>
                 <p className={`text-sm ${colors.textSecondary} relative z-10`}>Total de Proyectos</p>
                 <div className={`mt-3 pt-3 border-t ${colors.border} relative z-10`}>
-                  <div className={`flex items-center gap-1 text-xs ${thisMonthCount > 0 ? 'text-green-500' : 'text-[#8E8E93]'}`}>
+                  <div className={`flex items-center gap-1 text-xs ${!isLoadingProjects && thisMonthCount > 0 ? 'text-green-500' : 'text-[#8E8E93]'}`}>
                     <TrendingUp className="w-3 h-3" />
-                    <span>{thisMonthCount > 0 ? `+${thisMonthCount} este mes` : 'Sin nuevos este mes'}</span>
+                    <span>{isLoadingProjects ? '…' : thisMonthCount > 0 ? `+${thisMonthCount} este mes` : 'Sin nuevos este mes'}</span>
                   </div>
                 </div>
               </motion.div>
@@ -597,7 +599,9 @@ export function Projects() {
                     <AlertTriangle className="w-4 h-4 text-[#FF3B30]" />
                   </motion.div>
                 </div>
-                <p className={`text-3xl font-bold ${colors.textPrimary} mb-1 relative z-10`}>{projectsAtRisk}</p>
+                <p className={`text-3xl font-bold ${colors.textPrimary} mb-1 relative z-10`}>
+                  {isLoadingProjects ? '—' : projectsAtRisk}
+                </p>
                 <p className={`text-sm ${colors.textSecondary} relative z-10`}>Proyectos en Riesgo</p>
                 <div className={`mt-3 pt-3 border-t ${colors.border} relative z-10`}>
                   <div className="flex items-center gap-1 text-xs text-[#FF3B30]">
