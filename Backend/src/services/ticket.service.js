@@ -463,13 +463,21 @@ async function updateTicketStatus({ ticketId, status, actualHours, userId, role 
   }
 
   const ticket = await prisma.ticket.findUnique({
-    where: {
-      id: ticketId,
-    },
+    where: { id: ticketId },
   });
 
   if (!ticket) {
     throw new Error("El ticket no existe");
+  }
+
+  // Developers can only move tickets to IN_PROGRESS or BLOCKED.
+  // Exception: if the ticket is already DONE (e.g. set by GitHub webhook),
+  // they may keep it as DONE to log their actual hours.
+  const DEVELOPER_ALLOWED = ["IN_PROGRESS", "BLOCKED"];
+  if (role === "DEVELOPER" && !DEVELOPER_ALLOWED.includes(status)) {
+    if (!(status === "DONE" && ticket.status === "DONE")) {
+      throw new Error("No tienes permiso para asignar ese estado al ticket");
+    }
   }
 
   await validateProjectAccess({
@@ -495,7 +503,7 @@ async function updateTicketStatus({ ticketId, status, actualHours, userId, role 
       startedAt: isMovingToInProgress ? new Date() : ticket.startedAt,
       completedAt: isMovingToDone ? new Date() : isLeavingDone ? null : ticket.completedAt,
       actualHours:
-        ["ADMIN", "PM"].includes(role) && actualHours !== undefined && actualHours !== null
+        actualHours !== undefined && actualHours !== null && (isMovingToDone || ticket.status === "DONE")
           ? Number(actualHours)
           : isLeavingDone
           ? null

@@ -252,10 +252,10 @@ export function TicketDetailModal({
                 >
                   <option value="Backlog">Backlog</option>
                   <option value="In Progress">In Progress</option>
-                  <option value="Review">Review</option>
-                  <option value="Done">Done</option>
+                  {userRole !== 'DEVELOPER' && <option value="Review">Review</option>}
+                  {userRole !== 'DEVELOPER' && <option value="Done">Done</option>}
                   <option value="Blocked">Blocked</option>
-                  <option value="Cancelled">Cancelled</option>
+                  {userRole !== 'DEVELOPER' && <option value="Cancelled">Cancelled</option>}
                 </select>
               </div>
 
