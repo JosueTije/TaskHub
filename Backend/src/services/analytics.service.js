@@ -77,7 +77,9 @@ async function getProjectDashboard({ projectId, userId, role }) {
   // ===============================
   // Story Points Progress
   // ===============================
-  const totalStoryPoints = tickets.reduce(
+  const activeTickets = tickets.filter((t) => t.status !== "CANCELLED");
+
+  const totalStoryPoints = activeTickets.reduce(
     (sum, ticket) => sum + (ticket.storyPoints || 0),
     0
   );
@@ -92,8 +94,8 @@ async function getProjectDashboard({ projectId, userId, role }) {
   // Fallback to ticket count ratio when no story points are defined
   const progress = totalStoryPoints
     ? Math.round((completedStoryPoints / totalStoryPoints) * 100)
-    : tickets.length
-    ? Math.round((completedTickets.length / tickets.length) * 100)
+    : activeTickets.length
+    ? Math.round((completedTickets.length / activeTickets.length) * 100)
     : 0;
 
   // ===============================
@@ -142,7 +144,7 @@ const efficiency =
   }
 
 const scheduleVariance =
-  tickets.length === 0
+  activeTickets.length === 0
     ? 0
     : progress - plannedProgress;
 
@@ -181,7 +183,8 @@ const spi =
     (sprint, index) => {
       const sprintTickets = tickets.filter(
         (ticket) =>
-          ticket.sprintId === sprint.id
+          ticket.sprintId === sprint.id &&
+          ticket.status !== "CANCELLED"
       );
 
       const sprintCompleted =
@@ -230,69 +233,49 @@ const spi =
     (member) => {
       const userTickets = tickets.filter(
         (ticket) =>
-          ticket.assignedToId ===
-          member.userId
+          ticket.assignedToId === member.userId &&
+          ticket.status !== "CANCELLED"
       );
 
       const userEstimated =
         userTickets.reduce(
           (sum, ticket) =>
-            sum +
-            (ticket.estimatedHours ||
-              0),
+            sum + (ticket.estimatedHours || 0),
           0
         );
 
       const userActual = userTickets
-        .filter(
-          (ticket) =>
-            ticket.status === "DONE"
-        )
+        .filter((ticket) => ticket.status === "DONE")
         .reduce(
-          (sum, ticket) =>
-            sum +
-            (ticket.actualHours || 0),
+          (sum, ticket) => sum + (ticket.actualHours || 0),
           0
         );
 
       const userStoryTotal =
         userTickets.reduce(
-          (sum, ticket) =>
-            sum +
-            (ticket.storyPoints || 0),
+          (sum, ticket) => sum + (ticket.storyPoints || 0),
           0
         );
 
       const userStoryDone =
         userTickets
-          .filter(
-            (ticket) =>
-              ticket.status === "DONE"
-          )
+          .filter((ticket) => ticket.status === "DONE")
           .reduce(
-            (sum, ticket) =>
-              sum +
-              (ticket.storyPoints || 0),
+            (sum, ticket) => sum + (ticket.storyPoints || 0),
             0
           );
 
       const performance =
         userStoryTotal > 0
-          ? Math.round(
-              (userStoryDone /
-                userStoryTotal) *
-                100
-            )
+          ? Math.round((userStoryDone / userStoryTotal) * 100)
           : 0;
 
       return {
         id: member.user.id,
         name: member.user.fullName,
-        tasksAssigned:
-          userTickets.length,
+        tasksAssigned: userTickets.length,
         performance,
-        estimatedHours:
-          userEstimated,
+        estimatedHours: userEstimated,
         actualHours: userActual,
         status: "Active",
       };
@@ -374,12 +357,13 @@ async function getProjectMetrics({ projectId, userId, role }) {
 
   const allTickets = sprints.flatMap((s) => s.tickets);
 
-  // Velocity history: story points done per sprint
+  // Velocity history: story points done per sprint (exclude cancelled)
   const velocityHistory = sprints.map((s) => {
-    const done = s.tickets
+    const activeSprintTickets = s.tickets.filter((t) => t.status !== "CANCELLED");
+    const done = activeSprintTickets
       .filter((t) => t.status === "DONE")
       .reduce((sum, t) => sum + (t.storyPoints || 0), 0);
-    const commitment = s.capacity || s.tickets.reduce((sum, t) => sum + (t.storyPoints || 0), 0);
+    const commitment = s.capacity || activeSprintTickets.reduce((sum, t) => sum + (t.storyPoints || 0), 0);
     return { sprint: s.name, velocity: done, commitment };
   });
 
@@ -398,7 +382,7 @@ async function getProjectMetrics({ projectId, userId, role }) {
     const daysOverdue = isExpired ? Math.abs(rawDaysRemaining) : 0;
 
     const ticketsByPriority = ["CRITICAL", "HIGH", "MEDIUM", "LOW"].map((priority) => {
-      const p = st.filter((t) => t.priority === priority);
+      const p = st.filter((t) => t.priority === priority && t.status !== "CANCELLED");
       return { priority, completed: p.filter((t) => t.status === "DONE").length, total: p.length };
     }).filter((p) => p.total > 0);
 
@@ -412,6 +396,7 @@ async function getProjectMetrics({ projectId, userId, role }) {
       else if (["IN_PROGRESS", "IN_REVIEW"].includes(t.status)) d.inProgress++;
     }
 
+    const stActive = st.filter((t) => t.status !== "CANCELLED");
     activeSprintData = {
       id: activeSprint.id,
       name: activeSprint.name,
@@ -421,11 +406,11 @@ async function getProjectMetrics({ projectId, userId, role }) {
       totalDays,
       capacity: activeSprint.capacity,
       ticketCounts: {
-        total: st.length,
-        done: st.filter((t) => t.status === "DONE").length,
-        inProgress: st.filter((t) => ["IN_PROGRESS", "IN_REVIEW"].includes(t.status)).length,
-        blocked: st.filter((t) => t.status === "BLOCKED").length,
-        todo: st.filter((t) => t.status === "TODO").length,
+        total: stActive.length,
+        done: stActive.filter((t) => t.status === "DONE").length,
+        inProgress: stActive.filter((t) => ["IN_PROGRESS", "IN_REVIEW"].includes(t.status)).length,
+        blocked: stActive.filter((t) => t.status === "BLOCKED").length,
+        todo: stActive.filter((t) => t.status === "TODO").length,
         cancelled: st.filter((t) => t.status === "CANCELLED").length,
       },
       burndown: computeBurndown(activeSprint, st),
@@ -442,7 +427,7 @@ async function getProjectMetrics({ projectId, userId, role }) {
 
   const now = new Date();
   const teamMetrics = members.filter((m) => m.user).map((m) => {
-    const myTickets = allTickets.filter((t) => t.assignedToId === m.userId);
+    const myTickets = allTickets.filter((t) => t.assignedToId === m.userId && t.status !== "CANCELLED");
     const myDone = myTickets.filter((t) => t.status === "DONE");
     const myBlocked = myTickets.filter((t) => t.status === "BLOCKED");
 
