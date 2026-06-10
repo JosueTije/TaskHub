@@ -21,12 +21,14 @@ const githubWebhookController = require("./controllers/github.webhook");
 const app = express();
 
 app.use(helmet({ crossOriginResourcePolicy: { policy: "cross-origin" } })); //protecciónn !!
+const allowedOrigins = [
+  "http://localhost:5173",
+  process.env.FRONTEND_URL,
+].filter(Boolean);
+
 app.use(
   cors({
-    origin: [
-      "http://localhost:5173",
-      "https://taskhub-frontend-phi.vercel.app",
-    ],
+    origin: allowedOrigins,
     credentials: true,
   })
 );
