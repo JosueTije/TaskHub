@@ -19,6 +19,14 @@ module.exports = [
     },
   },
   {
+    files: ["src/__tests__/**/*.js", "**/*.test.js", "**/*.spec.js"],
+    languageOptions: {
+      globals: {
+        ...globals.jest,
+      },
+    },
+  },
+  {
     ignores: ["node_modules/**", "prisma/migrations/**"],
   },
 ];
