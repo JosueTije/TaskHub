@@ -143,16 +143,36 @@ const efficiency =
     );
   }
 
-const scheduleVariance =
-  activeTickets.length === 0
-    ? 0
-    : progress - plannedProgress;
+  // SPI y SV solo tienen sentido cuando hay un sprint activo con trabajo pendiente.
+  // Si todos los tickets son DONE (sin sprint activo), las fórmulas se disparan
+  // porque progress=100% contra un plannedProgress bajo → SPI=25, SV=96.
+  const activeSprint = sprints.find((s) => s.status === "ACTIVE");
+  const activeSprintTickets = activeSprint
+    ? tickets.filter((t) => t.sprintId === activeSprint.id && t.status !== "CANCELLED")
+    : [];
 
-const hasWorkStarted = completedStoryPoints > 0;
+  const activeSprintTotalSP = activeSprintTickets.reduce((s, t) => s + (t.storyPoints || 0), 0);
+  const activeSprintDoneSP = activeSprintTickets
+    .filter((t) => t.status === "DONE")
+    .reduce((s, t) => s + (t.storyPoints || 0), 0);
+  let activeSprintProgress = null;
+  if (activeSprintTotalSP > 0) {
+    activeSprintProgress = Math.round((activeSprintDoneSP / activeSprintTotalSP) * 100);
+  } else if (activeSprintTickets.length > 0) {
+    const doneCnt = activeSprintTickets.filter((t) => t.status === "DONE").length;
+    activeSprintProgress = Math.round((doneCnt / activeSprintTickets.length) * 100);
+  }
+
+const scheduleVariance =
+  activeSprintTickets.length === 0
+    ? null
+    : activeSprintProgress - plannedProgress;
+
+const hasWorkStarted = activeSprintDoneSP > 0 || activeSprintTickets.some((t) => t.status === "DONE");
 
 const spi =
-  hasWorkStarted && plannedProgress > 0
-    ? Number((progress / plannedProgress).toFixed(2))
+  activeSprintTickets.length > 0 && hasWorkStarted && plannedProgress > 0
+    ? Number((activeSprintProgress / plannedProgress).toFixed(2))
     : null;
 
   // ===============================
@@ -177,54 +197,43 @@ const spi =
   // ===============================
   // Progress History by Sprint
   // ===============================
-  let completedAccum = 0;
+  // For each sprint, use the snapshot (saved at close time) so that deleted
+  // incomplete tickets don't inflate the "actual" percentage retroactively.
+  const progressHistory = sprints.map((sprint, index) => {
+    let sprintDoneSP;
+    let sprintTotalSP;
 
-  const progressHistory = sprints.map(
-    (sprint, index) => {
+    if (sprint.status === "COMPLETED" && sprint.snapshotTotalSP != null) {
+      // Use the snapshot captured before any tickets were deleted
+      sprintDoneSP = sprint.snapshotCompletedSP ?? 0;
+      sprintTotalSP = sprint.snapshotTotalSP;
+    } else {
+      // Active / planning sprint — use live ticket data
       const sprintTickets = tickets.filter(
-        (ticket) =>
-          ticket.sprintId === sprint.id &&
-          ticket.status !== "CANCELLED"
+        (t) => t.sprintId === sprint.id && t.status !== "CANCELLED"
       );
-
-      const sprintCompleted =
-        sprintTickets
-          .filter(
-            (ticket) =>
-              ticket.status === "DONE"
-          )
-          .reduce(
-            (sum, ticket) =>
-              sum +
-              (ticket.storyPoints || 0),
-            0
-          );
-
-      completedAccum += sprintCompleted;
-
-      const actual = totalStoryPoints
-        ? Math.round(
-            (completedAccum /
-              totalStoryPoints) *
-              100
-          )
-        : 0;
-
-      const planned = sprints.length
-        ? Math.round(
-            ((index + 1) /
-              sprints.length) *
-              100
-          )
-        : 0;
-
-      return {
-        date: sprint.name,
-        planned,
-        actual,
-      };
+      sprintTotalSP = sprintTickets.reduce((s, t) => s + (t.storyPoints || 0), 0);
+      sprintDoneSP = sprintTickets
+        .filter((t) => t.status === "DONE")
+        .reduce((s, t) => s + (t.storyPoints || 0), 0);
     }
-  );
+
+    const actual = sprintTotalSP > 0
+      ? Math.round((sprintDoneSP / sprintTotalSP) * 100)
+      : 0;
+
+    const planned = sprints.length
+      ? Math.round(((index + 1) / sprints.length) * 100)
+      : 0;
+
+    return {
+      date: sprint.name,
+      planned,
+      actual,
+      doneSP: sprintDoneSP,
+      totalSP: sprintTotalSP,
+    };
+  });
 
   // ===============================
   // Team Metrics
