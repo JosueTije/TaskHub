@@ -11,7 +11,7 @@ const {
   signPasswordResetToken,
   verifyToken,
 } = require("../utils/jwt");
-const { sendPasswordResetEmail } = require("../config/mailer");
+const { sendOtpEmail, sendPasswordResetEmail } = require("../config/mailer");
 
 async function login({ email, password }) {
   const user = await prisma.user.findUnique({
