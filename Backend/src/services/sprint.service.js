@@ -426,6 +426,12 @@ async function closeSprint({ sprintId, incompleteAction, destinationSprintId, us
     (t) => !["DONE", "CANCELLED"].includes(t.status)
   );
 
+  // Snapshot before any tickets are removed
+  const snapshotTickets = sprint.tickets.filter((t) => t.status !== "CANCELLED");
+  const snapshotDone = snapshotTickets.filter((t) => t.status === "DONE");
+  const snapshotTotalSP = snapshotTickets.reduce((s, t) => s + (t.storyPoints || 0), 0);
+  const snapshotCompletedSP = snapshotDone.reduce((s, t) => s + (t.storyPoints || 0), 0);
+
   if (incompleteAction === "move" && destinationSprintId) {
     const destination = await prisma.sprint.findUnique({ where: { id: destinationSprintId } });
     if (!destination || destination.projectId !== sprint.projectId) {
@@ -450,7 +456,14 @@ async function closeSprint({ sprintId, incompleteAction, destinationSprintId, us
 
   const closedSprint = await prisma.sprint.update({
     where: { id: sprintId },
-    data: { status: "COMPLETED", completedAt: new Date() },
+    data: {
+      status: "COMPLETED",
+      completedAt: new Date(),
+      snapshotTotalTickets: snapshotTickets.length,
+      snapshotCompletedTickets: snapshotDone.length,
+      snapshotTotalSP,
+      snapshotCompletedSP,
+    },
   });
 
   return {

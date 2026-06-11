@@ -102,6 +102,12 @@ model Sprint {
 
   githubBranch     String?
 
+  // Snapshot at close time — preserves totals before incomplete tickets are deleted
+  snapshotTotalTickets     Int?
+  snapshotCompletedTickets Int?
+  snapshotTotalSP          Int?
+  snapshotCompletedSP      Int?
+
   project     Project      @relation(fields: [projectId], references: [id], onDelete: Cascade)
   tickets     Ticket[]
 
