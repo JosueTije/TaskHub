@@ -99,226 +99,238 @@ function drawCover(doc, projectName, subtitle, badgeText, badgeColor, dateStr) {
   doc.fontSize(8).fillColor(C.border).text("Powered by Groq · llama-3.1-8b-instant", 0, ph - 72, { align: "center" });
 }
 
+// ── Executive Summary helpers (one function per page) ────────────────────────
+
+function confidenceColor(nivel) {
+  if (nivel === "Alto")  return C.green;
+  if (nivel === "Medio") return C.yellow;
+  return C.accent;
+}
+
+function kpiColor(value, thresholdHigh, thresholdMid, nullColor) {
+  if (value === null || value === undefined) return nullColor ?? C.textMuted;
+  if (value >= thresholdHigh) return C.green;
+  if (value >= thresholdMid)  return C.yellow;
+  return C.accent;
+}
+
+function drawKpiBox(doc, x, y, value, label, color, size) {
+  const { w, h } = size;
+  fillRect(doc, x, y, w, h, color, 0.12);
+  strokeRect(doc, x, y, w, h, color, 0.8);
+  doc.fontSize(22).fillColor(color).text(String(value), x, y + 12, { width: w, align: "center" });
+  doc.fontSize(8.5).fillColor(C.textMuted).text(label, x, y + 46, { width: w, align: "center" });
+}
+
+function drawExecCover(doc, pname, aiAnalysis, dateStr, _M) {
+  doc.addPage();
+  const statusColor = doc._context?.project?.status === "ACTIVE" ? C.green : C.textMuted;
+  const statusLabel  = doc._context?.project?.status === "ACTIVE" ? "Activo" : (doc._context?.project?.status ?? "");
+  drawCover(doc, pname, "Resumen Ejecutivo", statusLabel, statusColor, dateStr);
+
+  const confColor = confidenceColor(aiAnalysis.nivelConfianza);
+  doc.fontSize(10).fillColor(C.textMuted).text("Nivel de confianza del análisis: ", 0, 345, { align: "center", continued: true });
+  doc.fillColor(confColor).text(aiAnalysis.nivelConfianza, { align: "center" });
+  addFooter(doc, dateStr, 1);
+}
+
+function drawExecStatusPage(doc, kpis, sprints, aiAnalysis, dateStr, M) {
+  doc.addPage();
+  const pw = doc.page.width;
+  const ph = doc.page.height;
+  fillRect(doc, 0, 0, pw, ph, C.bg);
+  fillRect(doc, 0, 0, pw, 4, C.accent);
+  doc.fontSize(18).fillColor(C.textPrimary).text("Estado actual del proyecto", M, 32);
+  fillRect(doc, M, 57, 55, 2.5, C.accent);
+
+  const kpiW = (pw - M * 2 - 12) / 2;
+  const kpiH = 72;
+  const kpiY = 72;
+  const spiDisplay = kpis.spi === null ? "N/A" : String(kpis.spi);
+  const effDisplay  = kpis.efficiency === null ? "N/A" : String(kpis.efficiency);
+  const progressColor = kpiColor(kpis.progressPercent, 70, 40);
+  const spiColor      = kpiColor(kpis.spi, 1, 0.8);
+  const effColor      = kpiColor(kpis.efficiency, 1, 0.8);
+
+  const kpiSize = { w: kpiW, h: kpiH };
+  drawKpiBox(doc, M,             kpiY,             `${kpis.progressPercent}%`, "Avance del proyecto",        progressColor, kpiSize);
+  drawKpiBox(doc, M + kpiW + 12, kpiY,             spiDisplay,                "SPI (Schedule Performance)", spiColor,      kpiSize);
+  drawKpiBox(doc, M,             kpiY + kpiH + 10, `${kpis.estimatedHours}h`, "Horas estimadas (DONE)",     C.blue,        kpiSize);
+  drawKpiBox(doc, M + kpiW + 12, kpiY + kpiH + 10, effDisplay,               "Eficiencia de horas",        effColor,      kpiSize);
+
+  let cursorY = kpiY + kpiH * 2 + 30;
+  if (sprints.active) {
+    const sp = sprints.active;
+    const spPct = sp.totalTickets > 0 ? Math.round((sp.completedTickets / sp.totalTickets) * 100) : 0;
+    doc.fontSize(10).fillColor(C.textMuted).text(`Sprint activo: ${sp.name}`, M, cursorY);
+    cursorY += 18;
+    const barW = pw - M * 2 - 40;
+    fillRect(doc, M, cursorY, barW, 10, C.border);
+    const filled = Math.round((spPct / 100) * barW);
+    if (filled > 0) fillRect(doc, M, cursorY, filled, 10, C.accent);
+    doc.fontSize(8).fillColor(C.textPrimary).text(`${spPct}%`, M + barW + 6, cursorY);
+    cursorY += 22;
+    doc.fontSize(8.5).fillColor(C.textMuted).text(
+      `${sp.completedTickets}/${sp.totalTickets} tickets · ${sp.blockedTickets} bloqueados · ${sp.inProgressTickets} en progreso`,
+      M, cursorY
+    );
+    cursorY += 22;
+  }
+
+  cursorY += 8;
+  doc.fontSize(11).fillColor(C.textPrimary).text("Análisis general", M, cursorY);
+  fillRect(doc, M, cursorY + 16, pw - M * 2, 1, C.border);
+  doc.fontSize(9.5).fillColor(C.textMuted).text(aiAnalysis.resumenGeneral, M, cursorY + 22, { width: pw - M * 2, lineGap: 2 });
+  cursorY = doc.y + 14;
+
+  if (cursorY < ph - 100) {
+    doc.fontSize(11).fillColor(C.textPrimary).text("Estado del sprint", M, cursorY);
+    fillRect(doc, M, cursorY + 16, pw - M * 2, 1, C.border);
+    doc.fontSize(9.5).fillColor(C.textMuted).text(aiAnalysis.estadoSprint, M, cursorY + 22, { width: pw - M * 2, lineGap: 2 });
+  }
+  addFooter(doc, dateStr, 2);
+}
+
+function drawExecTeamPage(doc, context, aiAnalysis, dateStr, M) {
+  doc.addPage();
+  const pw = doc.page.width;
+  const ph = doc.page.height;
+  fillRect(doc, 0, 0, pw, ph, C.bg);
+  fillRect(doc, 0, 0, pw, 4, C.accent);
+  doc.fontSize(18).fillColor(C.textPrimary).text("Rendimiento del equipo", M, 32);
+  fillRect(doc, M, 57, 55, 2.5, C.accent);
+
+  const team = [...context.team].sort((a, b) => b.rendimiento - a.rendimiento);
+  const cols = { name: M, spAct: M + 155, spSP: M + 238, over: M + 300, rend: M + 348, eff: M + 400, pts: M + 452 };
+  const colW = { name: 148, spAct: 76, spSP: 55, over: 42, rend: 46, eff: 46, pts: 42 };
+  const rowH = 26;
+  const tY = 72;
+
+  fillRect(doc, M, tY, pw - M * 2, rowH, C.surface);
+  doc.fontSize(7.5).fillColor(C.textMuted);
+  doc.text("Developer",     cols.name,  tY + 8, { width: colW.name });
+  doc.text("Sprint activo", cols.spAct, tY + 4, { width: colW.spAct, align: "center" });
+  doc.text("SP pend.",      cols.spSP,  tY + 4, { width: colW.spSP,  align: "center" });
+  doc.text("Retr.",         cols.over,  tY + 4, { width: colW.over,  align: "center" });
+  doc.text("Rend.",         cols.rend,  tY + 8, { width: colW.rend,  align: "center" });
+  doc.text("Efic.",         cols.eff,   tY + 8, { width: colW.eff,   align: "center" });
+  doc.text("Pts",           cols.pts,   tY + 8, { width: colW.pts,   align: "center" });
+
+  team.forEach((m, i) => {
+    const rY = tY + rowH + i * rowH;
+    if (i === 0) fillRect(doc, M, rY, pw - M * 2, rowH, C.green, 0.07);
+    else if (i % 2 === 0) fillRect(doc, M, rY, pw - M * 2, rowH, C.surface, 0.5);
+
+    const rColor   = kpiColor(m.rendimiento, 80, 50);
+    const overColor = m.overdueTickets > 0 ? C.accent : C.textMuted;
+    const spActStr  = context.sprints.active
+      ? `${m.activeSprintInProgress}ip/${m.activeSprintBlocked}bl/${m.activeSprintDone}ok`
+      : "—";
+
+    doc.fontSize(9).fillColor(C.textPrimary).text(m.name, cols.name, rY + 8, { width: colW.name });
+    doc.fontSize(8).fillColor(C.textMuted).text(spActStr, cols.spAct, rY + 8, { width: colW.spAct, align: "center" });
+    doc.fillColor(C.blue).text(context.sprints.active ? String(m.activeSprintSP) : "—", cols.spSP, rY + 8, { width: colW.spSP, align: "center" });
+    doc.fillColor(overColor).text(String(m.overdueTickets), cols.over, rY + 8, { width: colW.over, align: "center" });
+    doc.fillColor(rColor).text(`${m.rendimiento}%`, cols.rend, rY + 8, { width: colW.rend, align: "center" });
+    const effStr = m.efficiency === null ? "—" : String(m.efficiency);
+    doc.fillColor(C.textPrimary).text(effStr, cols.eff, rY + 8, { width: colW.eff, align: "center" });
+    doc.text(String(m.gamificationPoints), cols.pts, rY + 8, { width: colW.pts, align: "center" });
+  });
+
+  let narrativeY = tY + rowH + team.length * rowH + 18;
+  const cargaList = Array.isArray(aiAnalysis.cargaEquipo) ? aiAnalysis.cargaEquipo : [];
+
+  if (cargaList.length > 0 && narrativeY < ph - 180) {
+    doc.fontSize(11).fillColor(C.textPrimary).text("Carga de trabajo por miembro", M, narrativeY);
+    fillRect(doc, M, narrativeY + 16, pw - M * 2, 1, C.border);
+    narrativeY += 22;
+    cargaList.forEach((c) => {
+      if (narrativeY > ph - 90) return;
+      let estadoColor = C.blue;
+      if (c.estado === "Sobrecargado") estadoColor = C.accent;
+      else if (c.estado === "Balanceado") estadoColor = C.green;
+      fillRect(doc, M, narrativeY, pw - M * 2, 34, C.surface);
+      strokeRect(doc, M, narrativeY, pw - M * 2, 34, C.border, 0.4);
+      fillRect(doc, M, narrativeY, 3, 34, estadoColor);
+      doc.fontSize(9).fillColor(C.textPrimary).text(c.nombre,     M + 10,  narrativeY + 4,  { width: 130 });
+      doc.fontSize(7.5).fillColor(estadoColor).text(c.estado,     M + 10,  narrativeY + 18, { width: 130 });
+      doc.fontSize(8).fillColor(C.textMuted).text(c.cargaActual,  M + 150, narrativeY + 5,  { width: pw - M * 2 - 162 });
+      if (c.alertas) {
+        doc.fontSize(7.5).fillColor(C.yellow).text(c.alertas, M + 150, narrativeY + 19, { width: pw - M * 2 - 162, ellipsis: true, height: 10 });
+      }
+      narrativeY += 42;
+    });
+  }
+
+  if (narrativeY < ph - 100) {
+    narrativeY += 6;
+    doc.fontSize(11).fillColor(C.textPrimary).text("Análisis del equipo", M, narrativeY);
+    fillRect(doc, M, narrativeY + 16, pw - M * 2, 1, C.border);
+    doc.fontSize(9.5).fillColor(C.textMuted).text(aiAnalysis.rendimientoEquipo, M, narrativeY + 22, { width: pw - M * 2, lineGap: 2 });
+  }
+  addFooter(doc, dateStr, 3);
+}
+
+function drawExecRecommendationsPage(doc, aiAnalysis, dateStr, M) {
+  doc.addPage();
+  const pw = doc.page.width;
+  const ph = doc.page.height;
+  fillRect(doc, 0, 0, pw, ph, C.bg);
+  fillRect(doc, 0, 0, pw, 4, C.accent);
+  doc.fontSize(18).fillColor(C.textPrimary).text("Proyección y recomendaciones", M, 32);
+  fillRect(doc, M, 57, 55, 2.5, C.accent);
+
+  fillRect(doc, M, 72, pw - M * 2, 68, C.surface);
+  strokeRect(doc, M, 72, pw - M * 2, 68, C.blue, 0.8);
+  doc.fontSize(11).fillColor(C.blue).text("Proyección de cierre", M + 14, 84);
+  doc.fontSize(9.5).fillColor(C.textMuted).text(aiAnalysis.proyeccionCierre, M + 14, 100, { width: pw - M * 2 - 28, lineGap: 2 });
+
+  doc.fontSize(14).fillColor(C.textPrimary).text("Recomendaciones", M, 158);
+  fillRect(doc, M, 177, pw - M * 2, 1, C.border);
+
+  const sorted = [...aiAnalysis.recomendaciones].sort((a, b) => {
+    const order = { Alta: 0, Media: 1, Baja: 2 };
+    return (order[a.prioridad] ?? 3) - (order[b.prioridad] ?? 3);
+  });
+
+  let recY = 185;
+  sorted.forEach((rec) => {
+    if (recY > ph - 100) return;
+    let dotColor = C.green;
+    if (rec.prioridad === "Alta")  dotColor = C.accent;
+    else if (rec.prioridad === "Media") dotColor = C.yellow;
+    doc.save().circle(M + 6, recY + 6, 4).fill(dotColor).restore();
+    const badgeW = 36;
+    fillRect(doc, M + 18, recY, badgeW, 13, dotColor, 0.2);
+    doc.fontSize(7).fillColor(dotColor).text(rec.prioridad, M + 18, recY + 3, { width: badgeW, align: "center" });
+    doc.fontSize(9.5).fillColor(C.textPrimary).text(rec.accion, M + 62, recY, { width: pw - M - 62 - M, lineGap: 1 });
+    recY = doc.y + 10;
+  });
+
+  const confY = recY + 12;
+  if (confY < ph - 80) {
+    fillRect(doc, M, confY, pw - M * 2, 44, C.surface);
+    const confColor = confidenceColor(aiAnalysis.nivelConfianza);
+    doc.fontSize(8.5).fillColor(confColor).text(`Confianza: ${aiAnalysis.nivelConfianza}`, M + 12, confY + 10);
+    doc.fontSize(8.5).fillColor(C.textMuted).text(aiAnalysis.razonConfianza, M + 12, confY + 24, { width: pw - M * 2 - 24 });
+  }
+  addFooter(doc, dateStr, 4);
+}
+
 // ── Executive Summary PDF ─────────────────────────────────────────────────────
 
 async function generateExecutiveSummaryPdf({ context, aiAnalysis }) {
   const pname = context.project.name;
-  const dateStr = new Date().toLocaleDateString("es-MX", {
-    day: "2-digit",
-    month: "long",
-    year: "numeric",
-  });
-  const kpis = context.kpis;
+  const dateStr = new Date().toLocaleDateString("es-MX", { day: "2-digit", month: "long", year: "numeric" });
+  const M = 50;
 
   return createPdfBuffer((doc) => {
-    const M = 50; // margin
-
-    // ── PAGE 1: COVER ─────────────────────────────────────────────────────
-    doc.addPage();
-    const pw = doc.page.width;
-    const ph = doc.page.height;
-    const statusColor = context.project.status === "ACTIVE" ? C.green : C.textMuted;
-    const statusLabel = context.project.status === "ACTIVE" ? "Activo" : context.project.status;
-    drawCover(doc, pname, "Resumen Ejecutivo", statusLabel, statusColor, dateStr);
-
-    // Confidence level on cover
-    const confColor =
-      aiAnalysis.nivelConfianza === "Alto"
-        ? C.green
-        : aiAnalysis.nivelConfianza === "Medio"
-        ? C.yellow
-        : C.accent;
-    doc.fontSize(10).fillColor(C.textMuted).text(
-      `Nivel de confianza del análisis: `,
-      0,
-      345,
-      { align: "center", continued: true }
-    );
-    doc.fillColor(confColor).text(aiAnalysis.nivelConfianza, { align: "center" });
-
-    addFooter(doc, dateStr, 1);
-
-    // ── PAGE 2: ESTADO ACTUAL ─────────────────────────────────────────────
-    doc.addPage();
-    fillRect(doc, 0, 0, pw, ph, C.bg);
-    fillRect(doc, 0, 0, pw, 4, C.accent);
-
-    doc.fontSize(18).fillColor(C.textPrimary).text("Estado actual del proyecto", M, 32);
-    fillRect(doc, M, 57, 55, 2.5, C.accent);
-
-    // KPI grid (2x2)
-    const kpiW = (pw - M * 2 - 12) / 2;
-    const kpiH = 72;
-    const kpiY = 72;
-
-    function drawKpiBox(x, y, value, label, color) {
-      fillRect(doc, x, y, kpiW, kpiH, color, 0.12);
-      strokeRect(doc, x, y, kpiW, kpiH, color, 0.8);
-      doc.fontSize(22).fillColor(color).text(String(value), x, y + 12, { width: kpiW, align: "center" });
-      doc.fontSize(8.5).fillColor(C.textMuted).text(label, x, y + 46, { width: kpiW, align: "center" });
-    }
-
-    const spiDisplay = kpis.spi !== null ? String(kpis.spi) : "N/A";
-    const effDisplay = kpis.efficiency !== null ? String(kpis.efficiency) : "N/A";
-
-    const progressColor = kpis.progressPercent >= 70 ? C.green : kpis.progressPercent >= 40 ? C.yellow : C.accent;
-    const spiColor = kpis.spi === null ? C.textMuted : kpis.spi >= 1 ? C.green : kpis.spi >= 0.8 ? C.yellow : C.accent;
-    const effColor = kpis.efficiency === null ? C.textMuted : kpis.efficiency >= 1 ? C.green : kpis.efficiency >= 0.8 ? C.yellow : C.accent;
-
-    drawKpiBox(M, kpiY, `${kpis.progressPercent}%`, "Avance del proyecto", progressColor);
-    drawKpiBox(M + kpiW + 12, kpiY, spiDisplay, "SPI (Schedule Performance)", spiColor);
-    drawKpiBox(M, kpiY + kpiH + 10, `${kpis.estimatedHours}h`, "Horas estimadas (DONE)", C.blue);
-    drawKpiBox(M + kpiW + 12, kpiY + kpiH + 10, effDisplay, "Eficiencia de horas", effColor);
-
-    // Sprint progress bar
-    let cursorY = kpiY + kpiH * 2 + 30;
-    if (context.sprints.active) {
-      const sp = context.sprints.active;
-      const spPct = sp.totalTickets > 0 ? Math.round((sp.completedTickets / sp.totalTickets) * 100) : 0;
-      doc.fontSize(10).fillColor(C.textMuted).text(`Sprint activo: ${sp.name}`, M, cursorY);
-      cursorY += 18;
-
-      const barW = pw - M * 2 - 40;
-      fillRect(doc, M, cursorY, barW, 10, C.border);
-      const filled = Math.round((spPct / 100) * barW);
-      if (filled > 0) fillRect(doc, M, cursorY, filled, 10, C.accent);
-      doc.fontSize(8).fillColor(C.textPrimary).text(`${spPct}%`, M + barW + 6, cursorY);
-      cursorY += 22;
-      doc.fontSize(8.5).fillColor(C.textMuted).text(
-        `${sp.completedTickets}/${sp.totalTickets} tickets · ${sp.blockedTickets} bloqueados · ${sp.inProgressTickets} en progreso`,
-        M, cursorY
-      );
-      cursorY += 22;
-    }
-
-    // Narrative
-    cursorY += 8;
-    doc.fontSize(11).fillColor(C.textPrimary).text("Análisis general", M, cursorY);
-    fillRect(doc, M, cursorY + 16, pw - M * 2, 1, C.border);
-    doc.fontSize(9.5).fillColor(C.textMuted).text(aiAnalysis.resumenGeneral, M, cursorY + 22, {
-      width: pw - M * 2,
-      lineGap: 2,
-    });
-    cursorY = doc.y + 14;
-
-    if (cursorY < ph - 100) {
-      doc.fontSize(11).fillColor(C.textPrimary).text("Estado del sprint", M, cursorY);
-      fillRect(doc, M, cursorY + 16, pw - M * 2, 1, C.border);
-      doc.fontSize(9.5).fillColor(C.textMuted).text(aiAnalysis.estadoSprint, M, cursorY + 22, {
-        width: pw - M * 2,
-        lineGap: 2,
-      });
-    }
-
-    addFooter(doc, dateStr, 2);
-
-    // ── PAGE 3: EQUIPO ────────────────────────────────────────────────────
-    doc.addPage();
-    fillRect(doc, 0, 0, pw, ph, C.bg);
-    fillRect(doc, 0, 0, pw, 4, C.accent);
-
-    doc.fontSize(18).fillColor(C.textPrimary).text("Rendimiento del equipo", M, 32);
-    fillRect(doc, M, 57, 55, 2.5, C.accent);
-
-    const team = [...context.team].sort((a, b) => b.rendimiento - a.rendimiento);
-    const cols = { name: M, done: M + 170, rend: M + 250, eff: M + 330, pts: M + 415 };
-    const colW = { name: 160, done: 70, rend: 72, eff: 80, pts: 60 };
-    const rowH = 26;
-    let tY = 72;
-
-    // Header
-    fillRect(doc, M, tY, pw - M * 2, rowH, C.surface);
-    doc.fontSize(8.5).fillColor(C.textMuted);
-    doc.text("Developer", cols.name, tY + 8, { width: colW.name });
-    doc.text("Completados", cols.done, tY + 8, { width: colW.done, align: "center" });
-    doc.text("Rendimiento", cols.rend, tY + 8, { width: colW.rend, align: "center" });
-    doc.text("Eficiencia", cols.eff, tY + 8, { width: colW.eff, align: "center" });
-    doc.text("Puntos", cols.pts, tY + 8, { width: colW.pts, align: "center" });
-
-    team.forEach((m, i) => {
-      const rY = tY + rowH + i * rowH;
-      if (i === 0) fillRect(doc, M, rY, pw - M * 2, rowH, C.green, 0.07);
-      else if (i % 2 === 0) fillRect(doc, M, rY, pw - M * 2, rowH, C.surface, 0.5);
-
-      const rColor = m.rendimiento >= 80 ? C.green : m.rendimiento >= 50 ? C.yellow : C.accent;
-      doc.fontSize(9).fillColor(C.textPrimary).text(m.name, cols.name, rY + 8, { width: colW.name });
-      doc.text(String(m.completedTickets), cols.done, rY + 8, { width: colW.done, align: "center" });
-      doc.fillColor(rColor).text(`${m.rendimiento}%`, cols.rend, rY + 8, { width: colW.rend, align: "center" });
-      doc.fillColor(C.textPrimary).text(
-        m.efficiency !== null ? String(m.efficiency) : "—",
-        cols.eff, rY + 8, { width: colW.eff, align: "center" }
-      );
-      doc.text(String(m.gamificationPoints), cols.pts, rY + 8, { width: colW.pts, align: "center" });
-    });
-
-    const narrativeY = tY + rowH + team.length * rowH + 22;
-    if (narrativeY < ph - 120) {
-      doc.fontSize(11).fillColor(C.textPrimary).text("Análisis del equipo", M, narrativeY);
-      fillRect(doc, M, narrativeY + 16, pw - M * 2, 1, C.border);
-      doc.fontSize(9.5).fillColor(C.textMuted).text(aiAnalysis.rendimientoEquipo, M, narrativeY + 22, {
-        width: pw - M * 2,
-        lineGap: 2,
-      });
-    }
-
-    addFooter(doc, dateStr, 3);
-
-    // ── PAGE 4: PROYECCIÓN Y RECOMENDACIONES ──────────────────────────────
-    doc.addPage();
-    fillRect(doc, 0, 0, pw, ph, C.bg);
-    fillRect(doc, 0, 0, pw, 4, C.accent);
-
-    doc.fontSize(18).fillColor(C.textPrimary).text("Proyección y recomendaciones", M, 32);
-    fillRect(doc, M, 57, 55, 2.5, C.accent);
-
-    // Projection box
-    fillRect(doc, M, 72, pw - M * 2, 68, C.surface);
-    strokeRect(doc, M, 72, pw - M * 2, 68, C.blue, 0.8);
-    doc.fontSize(11).fillColor(C.blue).text("Proyección de cierre", M + 14, 84);
-    doc.fontSize(9.5).fillColor(C.textMuted).text(aiAnalysis.proyeccionCierre, M + 14, 100, {
-      width: pw - M * 2 - 28,
-      lineGap: 2,
-    });
-
-    // Recommendations
-    doc.fontSize(14).fillColor(C.textPrimary).text("Recomendaciones", M, 158);
-    fillRect(doc, M, 177, pw - M * 2, 1, C.border);
-
-    const sorted = [...aiAnalysis.recomendaciones].sort((a, b) => {
-      const order = { Alta: 0, Media: 1, Baja: 2 };
-      return (order[a.prioridad] ?? 3) - (order[b.prioridad] ?? 3);
-    });
-
-    let recY = 185;
-    sorted.forEach((rec) => {
-      if (recY > ph - 100) return;
-      const dotColor = rec.prioridad === "Alta" ? C.accent : rec.prioridad === "Media" ? C.yellow : C.green;
-      doc.save().circle(M + 6, recY + 6, 4).fill(dotColor).restore();
-
-      const badgeW = 36;
-      fillRect(doc, M + 18, recY, badgeW, 13, dotColor, 0.2);
-      doc.fontSize(7).fillColor(dotColor).text(rec.prioridad, M + 18, recY + 3, { width: badgeW, align: "center" });
-
-      doc.fontSize(9.5).fillColor(C.textPrimary).text(rec.accion, M + 62, recY, {
-        width: pw - M - 62 - M,
-        lineGap: 1,
-      });
-      recY = doc.y + 10;
-    });
-
-    // Confidence footer note
-    const confY = recY + 12;
-    if (confY < ph - 80) {
-      fillRect(doc, M, confY, pw - M * 2, 44, C.surface);
-      const confColor =
-        aiAnalysis.nivelConfianza === "Alto" ? C.green : aiAnalysis.nivelConfianza === "Medio" ? C.yellow : C.accent;
-      doc.fontSize(8.5).fillColor(confColor).text(`Confianza: ${aiAnalysis.nivelConfianza}`, M + 12, confY + 10);
-      doc.fontSize(8.5).fillColor(C.textMuted).text(aiAnalysis.razonConfianza, M + 12, confY + 24, {
-        width: pw - M * 2 - 24,
-      });
-    }
-
-    addFooter(doc, dateStr, 4);
+    // Attach context so drawExecCover can read project status
+    doc._context = context;
+    drawExecCover(doc, pname, aiAnalysis, dateStr, M);
+    drawExecStatusPage(doc, context.kpis, context.sprints, aiAnalysis, dateStr, M);
+    drawExecTeamPage(doc, context, aiAnalysis, dateStr, M);
+    drawExecRecommendationsPage(doc, aiAnalysis, dateStr, M);
   });
 }
 
@@ -425,8 +437,9 @@ async function generateRiskAnalysisPdf({ context, riskData }) {
       strokeRect(doc, M, rY, pw - M * 2, cardH, C.border, 0.4);
 
       // Row 1: level + category + urgency
-      const urgColor =
-        risk.urgencia === "Inmediata" ? C.accent : risk.urgencia === "Esta semana" ? C.yellow : C.green;
+      let urgColor = C.green;
+      if (risk.urgencia === "Inmediata")    urgColor = C.accent;
+      else if (risk.urgencia === "Esta semana") urgColor = C.yellow;
       doc.fontSize(8).fillColor(rColor).text(risk.nivel, M + 14, rY + 9);
       doc.fillColor(C.textMuted).text(` · ${risk.categoria}`, M + 14 + 30, rY + 9);
       doc.fillColor(urgColor).text(risk.urgencia, pw - M - 120, rY + 9, { width: 100, align: "right" });

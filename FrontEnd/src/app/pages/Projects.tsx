@@ -180,7 +180,6 @@ export function Projects() {
   const [viewMode, setViewMode] = useState<ViewMode>('grid');
   const [searchQuery, setSearchQuery] = useState('');
   const [riskFilter, setRiskFilter] = useState<string>('');
-  const [statusFilter, setStatusFilter] = useState<string>('');
   const [showCreateProjectModal, setShowCreateProjectModal] = useState(false);
   const [showCreateUserModal, setShowCreateUserModal] = useState(false);
   const [userForm, setUserForm] = useState({ fullName: '', email: '', role: '', temporaryPassword: '' });
@@ -236,8 +235,7 @@ export function Projects() {
     const matchesSearch = project.name.toLowerCase().includes(searchQuery.toLowerCase());
     const effectiveRisk = project.analytics?.kpis.risk ?? project.riskLevel;
     const matchesRisk = !riskFilter || effectiveRisk === riskFilter;
-    const matchesStatus = !statusFilter || project.status === statusFilter;
-    return matchesSearch && matchesRisk && matchesStatus;
+    return matchesSearch && matchesRisk;
   });
 
   const highRiskProjects = userProjects.filter((p) => {
@@ -468,20 +466,7 @@ export function Projects() {
               <option value="CRITICAL">Prioridad Crítica</option>
             </select>
 
-            <select
-              value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value)}
-              className={`px-4 py-3 ${colors.bgSecondary} border ${colors.border} rounded-xl ${colors.textPrimary} outline-none transition-all text-sm cursor-pointer`}
-              style={{ borderColor: theme === 'dark' ? 'rgba(255,255,255,0.1)' : 'rgba(74,69,61,0.1)' }}
-            >
-              <option value="">Todos los estados</option>
-              <option value="ACTIVE">Activo</option>
-              <option value="ON_HOLD">En Pausa</option>
-              <option value="COMPLETED">Completado</option>
-              <option value="ARCHIVED">Archivado</option>
-            </select>
-
-            <div className={`flex items-center gap-1 ${colors.bgSecondary} border ${colors.border} rounded-xl p-1`}>
+<div className={`flex items-center gap-1 ${colors.bgSecondary} border ${colors.border} rounded-xl p-1`}>
               <motion.button
                 onClick={() => setViewMode('grid')}
                 className={`p-2 rounded-lg transition-all ${viewMode === 'grid' ? 'text-white' : `${colors.textSecondary}`}`}
@@ -706,9 +691,9 @@ export function Projects() {
                 Proyectos ({isLoadingProjects ? '…' : filteredProjects.length})
               </motion.h2>
 
-              {(searchQuery || riskFilter || statusFilter) && (
+              {(searchQuery || riskFilter) && (
                 <motion.button
-                  onClick={() => { setSearchQuery(''); setRiskFilter(''); setStatusFilter(''); }}
+                  onClick={() => { setSearchQuery(''); setRiskFilter(''); }}
                   className="text-xs font-medium hover:underline"
                   style={{ color: colors.accent }}
                   initial={{ opacity: 0 }}
@@ -770,8 +755,8 @@ export function Projects() {
                             <Badge className={`text-xs border ${getStatusColor(project.status)}`}>
                               {project.status}
                             </Badge>
-                            <Badge className={`text-xs border ${getRiskColor(project.riskLevel)}`}>
-                              Riesgo {project.riskLevel}
+                            <Badge className={`text-xs border ${getRiskColor(project.analytics?.kpis.risk ?? project.riskLevel)}`}>
+                              Riesgo {project.analytics?.kpis.risk ?? project.riskLevel}
                             </Badge>
                           </div>
                         </div>
