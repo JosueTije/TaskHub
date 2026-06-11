@@ -401,8 +401,8 @@ async function closeSprint({ sprintId, incompleteAction, destinationSprintId, us
     throw new Error("No tienes permisos para cerrar sprints");
   }
 
-  if (!["move", "cancel"].includes(incompleteAction)) {
-    throw new Error("incompleteAction debe ser 'move' o 'cancel'");
+  if (!["move", "delete"].includes(incompleteAction)) {
+    throw new Error("incompleteAction debe ser 'move' o 'delete'");
   }
 
   if (incompleteAction === "move" && !destinationSprintId) {
@@ -442,9 +442,8 @@ async function closeSprint({ sprintId, incompleteAction, destinationSprintId, us
     }
   } else {
     if (incompleteTickets.length > 0) {
-      await prisma.ticket.updateMany({
+      await prisma.ticket.deleteMany({
         where: { id: { in: incompleteTickets.map((t) => t.id) } },
-        data: { status: "CANCELLED" },
       });
     }
   }
@@ -457,7 +456,7 @@ async function closeSprint({ sprintId, incompleteAction, destinationSprintId, us
   return {
     sprint: closedSprint,
     migratedTickets: incompleteAction === "move" ? incompleteTickets.length : 0,
-    cancelledTickets: incompleteAction === "cancel" ? incompleteTickets.length : 0,
+    deletedTickets: incompleteAction === "delete" ? incompleteTickets.length : 0,
   };
 }
 

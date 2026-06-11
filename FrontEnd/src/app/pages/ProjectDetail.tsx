@@ -298,7 +298,7 @@ const projectBlockers = (project as any)?.blockers || [];
   const [showCloseProjectModal, setShowCloseProjectModal] = useState(false);
   const [showCompleteSprintModal, setShowCompleteSprintModal] = useState(false);
   const [showSrsImportModal, setShowSrsImportModal] = useState(false);
-  const [closeSprintAction, setCloseSprintAction] = useState<'move' | 'cancel'>('cancel');
+  const [closeSprintAction, setCloseSprintAction] = useState<'move' | 'delete'>('delete');
   const [closeSprintDestination, setCloseSprintDestination] = useState<string>('');
   const [showEditProjectModal, setShowEditProjectModal] = useState(false);
   const [editProjectForm, setEditProjectForm] = useState({ name: '', description: '', pmId: '', riskLevel: '', startDate: '', targetEndDate: '', budget: '' });
@@ -706,7 +706,7 @@ const handleCompleteSprint = async () => {
     await loadDashboard();
 
     setShowCompleteSprintModal(false);
-    setCloseSprintAction('cancel');
+    setCloseSprintAction('delete');
     setCloseSprintDestination('');
 
     const nextActiveSprint = (data.sprints || []).find(
@@ -3413,12 +3413,12 @@ setTicketData({
                       <input
                         type="radio"
                         name="closeAction"
-                        value="cancel"
-                        checked={closeSprintAction === 'cancel'}
-                        onChange={() => { setCloseSprintAction('cancel'); setCloseSprintDestination(''); }}
+                        value="delete"
+                        checked={closeSprintAction === 'delete'}
+                        onChange={() => { setCloseSprintAction('delete'); setCloseSprintDestination(''); }}
                         className="accent-red-500"
                       />
-                      <span className="text-sm text-white">Cancelar tickets incompletos</span>
+                      <span className="text-sm text-white">Eliminar tickets incompletos</span>
                     </label>
                     <label className="flex items-center gap-3 cursor-pointer">
                       <input
