@@ -5,6 +5,8 @@ const cors = require("cors");
 const helmet = require("helmet");
 const morgan = require("morgan");
 const cookieParser = require("cookie-parser");
+const swaggerUi = require("swagger-ui-express");
+const swaggerSpec = require("./config/swagger");
 const authRoutes = require("./routes/auth.routes");
 const adminRoutes = require("./routes/admin.routes");
 const userRoutes = require("./routes/user.routes");
@@ -59,6 +61,8 @@ app.get("/", (req, res) => {
 });
 
 // rutasssss!!
+
+app.use("/api-docs", swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 
 app.use("/auth", authRoutes);
 app.use("/admin", adminRoutes);

@@ -144,13 +144,6 @@ export function Login() {
                 />
                 <span className="text-sm text-[#8E8E93]">Recordarme</span>
               </label>
-              <button
-                type="button"
-                onClick={() => navigate('/forgot-password')}
-                className="text-sm text-[#E31837] hover:text-[#FF3B30] transition-colors"
-              >
-                ¿Olvidaste tu contraseña?
-              </button>
             </div>
 
             {/* Error Message */}

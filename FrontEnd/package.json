@@ -5,7 +5,9 @@
   "type": "module",
   "scripts": {
     "build": "vite build",
-    "dev": "vite"
+    "dev": "vite",
+    "lint": "eslint src/",
+    "test": "vitest run"
   },
   "dependencies": {
     "@emotion/react": "11.14.0",
@@ -66,11 +68,22 @@
     "vaul": "1.1.2"
   },
   "devDependencies": {
+    "@eslint/js": "^10.0.1",
     "@tailwindcss/vite": "4.1.12",
+    "@testing-library/jest-dom": "^6.9.1",
+    "@testing-library/react": "^16.3.2",
+    "@testing-library/user-event": "^14.6.1",
     "@vitejs/plugin-react": "4.7.0",
+    "eslint": "^10.4.1",
+    "eslint-plugin-react-hooks": "^7.1.1",
+    "eslint-plugin-react-refresh": "^0.5.2",
+    "globals": "^17.6.0",
+    "jsdom": "^29.1.1",
     "tailwindcss": "4.1.12",
     "typescript": "^6.0.3",
-    "vite": "^6.4.2"
+    "typescript-eslint": "^8.61.0",
+    "vite": "^6.4.2",
+    "vitest": "^4.1.8"
   },
   "peerDependencies": {
     "react": "18.3.1",

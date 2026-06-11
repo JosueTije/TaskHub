@@ -832,8 +832,6 @@ const handleTicketUpdate = async (ticketId: string, updates: any) => {
       Cancelled: "CANCELLED",
     };
 
-    let updatedTicketResponse;
-
     if (user.role === "ADMIN" || user.role === "PM") {
       const putRes = await authFetch(`/tickets/${ticketId}`, {
         method: "PUT",
@@ -857,7 +855,7 @@ const handleTicketUpdate = async (ticketId: string, updates: any) => {
       }
     }
 
-    updatedTicketResponse = await authFetch(`/tickets/${ticketId}/status`, {
+    const updatedTicketResponse = await authFetch(`/tickets/${ticketId}/status`, {
       method: "PATCH",
       body: JSON.stringify({
         status: statusMap[updates.status],

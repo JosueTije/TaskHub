@@ -1,13 +1,10 @@
-/**
- * One-time script: generate embeddings for all tickets that don't have one yet.
- * Run: node scripts/backfill-embeddings.js
- */
+
 require("dotenv").config();
 
 const prisma = require("../src/config/prisma");
 const { embedOne } = require("../src/services/embedding.service");
 
-const BATCH = 20; // Nomic free tier: 1000 req/day, so go easy
+const BATCH = 20; 
 
 function ticketToText(ticket) {
   return [
