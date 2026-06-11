@@ -13,22 +13,53 @@ function contextToString(context) {
   const { project, sprints, kpis, team, historicalBenchmark } = context;
   const active = sprints.active;
 
+  // ── Team: desglose completo por miembro ──────────────────────────────────
   const teamStr = team
-    .map(
-      (m) =>
-        `  - ${m.name} (${m.role}): ${m.assignedTickets} asignados, ${m.completedTickets} completados, ${m.rendimiento}% rendimiento, ${m.blockedTickets} bloqueados, ${m.gamificationPoints} puntos gamificación`
-    )
+    .map((m) => {
+      const sprintLine = active
+        ? `Sprint activo: ${m.activeSprintTotal} tickets (TODO:${m.activeSprintTodo} | IN_PROGRESS+IN_REVIEW:${m.activeSprintInProgress} | BLOCKED:${m.activeSprintBlocked} | DONE:${m.activeSprintDone}) | ${m.activeSprintSP} SP | ${m.activeSprintPendingHours}h pendientes estimadas`
+        : "Sin sprint activo";
+      const hoursLine =
+        m.estimatedHours > 0
+          ? `Horas totales: ${m.estimatedHours}h estimadas → ${m.usedHours}h reales (eficiencia ${m.efficiency ?? "N/A"})`
+          : "Sin horas registradas";
+      const cycleStr = m.avgCycleDays === null ? "Sin ciclos completados" : `Ciclo promedio: ${m.avgCycleDays}d/ticket`;
+      const precStr  = m.precisionRate === null ? "" : `Precisión estimación: ${m.precisionRate}%`;
+      const overdueStr = m.overdueTickets > 0 ? ` | ⚠ ${m.overdueTickets} RETRASADOS` : "";
+      const precPart   = precStr ? ` | ${precStr}` : "";
+
+      return `  ${m.name} (${m.role}):
+    Global: ${m.assignedTickets} asignados | ${m.completedTickets} completados (${m.rendimiento}%) | ${m.storyPointsDone}/${m.storyPointsAssigned} SP | ${m.blockedTickets} bloqueados${overdueStr}
+    ${sprintLine}
+    ${hoursLine} | ${cycleStr}${precPart}
+    Gamificación: ${m.gamificationPoints} pts`;
+    })
     .join("\n");
 
+  // ── Tickets del sprint activo agrupados por asignado ────────────────────
   const sprintTicketsStr = active
     ? active.tickets
-        .slice(0, 15)
-        .map(
-          (t) =>
-            `    - [${t.priority}] ${t.title} → ${t.status}${t.assignee ? ` (${t.assignee})` : ""}${t.hasPR ? " [PR abierto]" : ""}`
-        )
+        .slice(0, 20)
+        .map((t) => {
+          const who   = t.assignee ? ` → ${t.assignee}` : " → Sin asignar";
+          const sp    = t.storyPoints   ? ` (${t.storyPoints}SP)` : "";
+          const est   = t.estimatedHours ? ` est:${t.estimatedHours}h` : "";
+          const real  = t.usedHours      ? ` real:${t.usedHours}h`     : "";
+          const pr    = t.hasPR ? " [PR]" : "";
+          return `    - [${t.priority}][${t.status}] ${t.title}${who}${sp}${est}${real}${pr}`;
+        })
         .join("\n")
     : "Sin sprint activo";
+
+  // ── Sprints completados con velocidad ───────────────────────────────────
+  const completedStr = sprints.completed.length
+    ? sprints.completed
+        .map(
+          (s) =>
+            `  - ${s.name}: ${s.completedTickets}/${s.totalTickets} tickets completados, ${s.blockedTickets} bloqueados`
+        )
+        .join("\n")
+    : "  Ninguno";
 
   const histStr = historicalBenchmark.length
     ? historicalBenchmark
@@ -44,21 +75,22 @@ Estado: ${project.status} | Riesgo: ${project.riskLevel} | PM: ${project.pm || "
 Fechas: ${project.startDate ? new Date(project.startDate).toLocaleDateString("es") : "N/D"} → ${project.targetEndDate ? new Date(project.targetEndDate).toLocaleDateString("es") : "N/D"}
 GitHub: ${project.githubRepo || "No configurado"}
 
-KPIs:
+KPIs GENERALES:
   Avance: ${kpis.progressPercent}% (planeado: ${kpis.plannedProgress}%)
   SPI: ${kpis.spi ?? "N/A"} | Schedule Variance: ${kpis.scheduleVariance}%
   Horas estimadas (DONE): ${kpis.estimatedHours}h | Horas reales: ${kpis.usedHours}h
-  Eficiencia: ${kpis.efficiency ?? "N/A"} | Tickets bloqueados: ${kpis.blockedTickets}
+  Eficiencia global: ${kpis.efficiency ?? "N/A"} | Tickets bloqueados: ${kpis.blockedTickets}
 
 SPRINTS: ${sprints.total} total
-  Sprint activo: ${active ? `${active.name} (${active.completedTickets}/${active.totalTickets} tickets, ${active.blockedTickets} bloqueados)` : "Ninguno"}
-  Sprints completados: ${sprints.completed.length}
+  Sprint activo: ${active ? `${active.name} (${active.completedTickets}/${active.totalTickets} tickets | ${active.inProgressTickets} en progreso | ${active.blockedTickets} bloqueados)` : "Ninguno"}
+  Sprints completados (${sprints.completed.length}):
+${completedStr}
   Sprints próximos: ${sprints.upcoming.length}
 
-TICKETS DEL SPRINT ACTIVO:
+TICKETS DEL SPRINT ACTIVO (${active?.totalTickets ?? 0} tickets):
 ${sprintTicketsStr}
 
-EQUIPO:
+EQUIPO (${team.length} miembros):
 ${teamStr || "  Sin miembros"}
 
 BENCHMARK HISTÓRICO:
@@ -109,16 +141,26 @@ async function executiveSummaryController(req, res) {
     const messages = [
       {
         role: "system",
-        content: `Eres un consultor senior de gestión de proyectos. Analiza los siguientes datos del proyecto y genera un resumen ejecutivo profesional en español. El resumen debe ser claro, directo y útil para un stakeholder que no conoce los detalles técnicos. Responde ÚNICAMENTE en JSON válido sin texto adicional ni markdown. Para los campos de opción, elige SOLO UN valor:
+        content: `Eres un consultor senior de gestión de proyectos de software. Analiza los datos del proyecto y genera un resumen ejecutivo profesional en español.
+Los datos incluyen métricas detalladas POR MIEMBRO DEL EQUIPO: tickets asignados/completados, carga en sprint activo, horas estimadas vs reales, tickets retrasados, ciclo promedio y precisión de estimación. DEBES usar estos datos para mencionar miembros específicos por nombre cuando sea relevante.
+Responde ÚNICAMENTE en JSON válido sin texto adicional ni markdown:
 {
-  "resumenGeneral": "Párrafo de 3-4 oraciones describiendo el estado actual del proyecto",
-  "estadoSprint": "Párrafo de 2-3 oraciones sobre el sprint activo",
-  "rendimientoEquipo": "Párrafo de 2-3 oraciones sobre el desempeño del equipo",
-  "proyeccionCierre": "Párrafo de 2 oraciones proyectando la fecha de cierre basado en el ritmo actual",
-  "recomendaciones": [
-    { "prioridad": "Alta", "accion": "texto de la recomendación concreta" }
+  "resumenGeneral": "Párrafo de 3-4 oraciones describiendo el estado actual del proyecto con métricas concretas",
+  "estadoSprint": "Párrafo de 2-3 oraciones sobre el sprint activo: cuántos tickets hay en cada estado y qué está bloqueado",
+  "rendimientoEquipo": "Párrafo de 3-4 oraciones analizando el equipo. Menciona por nombre a quién tiene mayor carga, quién tiene tickets retrasados, quién tiene mejor/peor precisión de estimación, y cualquier desequilibrio notable",
+  "cargaEquipo": [
+    {
+      "nombre": "nombre del miembro",
+      "cargaActual": "descripción breve de su carga en el sprint activo (N tickets, N SP pendientes)",
+      "estado": "Sobrecargado | Balanceado | Con capacidad disponible",
+      "alertas": "lista de alertas si tiene bloqueados, retrasados o baja precisión, o vacío si no hay"
+    }
   ],
-  "nivelConfianza": "Medio",
+  "proyeccionCierre": "Párrafo de 2 oraciones proyectando la fecha de cierre basado en el SPI y ritmo actual",
+  "recomendaciones": [
+    { "prioridad": "Alta | Media | Baja", "accion": "Acción concreta y específica, mencionando nombres cuando aplique" }
+  ],
+  "nivelConfianza": "Alto | Medio | Bajo",
   "razonConfianza": "Por qué el modelo tiene ese nivel de confianza en el análisis"
 }`,
       },
@@ -153,28 +195,37 @@ async function riskAnalysisController(req, res) {
     const messages = [
       {
         role: "system",
-        content: `Eres un experto en gestión de riesgos de proyectos de software. Analiza los datos del proyecto y genera un análisis de riesgo detallado. Responde ÚNICAMENTE en JSON válido sin texto adicional ni markdown. Para cada campo que muestra opciones separadas por "|", elige SOLO UNA opción:
+        content: `Eres un experto en gestión de riesgos de proyectos de software. Analiza los datos del proyecto y genera un análisis de riesgo detallado en español.
+Los datos incluyen métricas POR MIEMBRO: carga en sprint activo, tickets bloqueados, retrasados, horas estimadas vs reales y precisión de estimación. Úsalos para identificar riesgos de capacidad y personas específicas.
+Responde ÚNICAMENTE en JSON válido sin texto adicional ni markdown. Elige SOLO UNA opción donde se muestran alternativas con "|":
 {
-  "nivelRiesgoGlobal": "Alto",
-  "justificacionGlobal": "Una oración explicando el nivel global",
+  "nivelRiesgoGlobal": "Crítico | Alto | Medio | Bajo",
+  "justificacionGlobal": "2 oraciones explicando el nivel global con datos concretos",
   "riesgos": [
     {
-      "categoria": "Cronograma",
-      "nivel": "Medio",
-      "descripcion": "Qué está pasando concretamente",
-      "impacto": "Qué puede pasar si no se atiende",
-      "recomendacion": "Acción concreta y específica para mitigarlo",
-      "urgencia": "Esta semana"
+      "categoria": "Cronograma | Equipo | Capacidad | Calidad | Técnico | Externo",
+      "nivel": "Crítico | Alto | Medio | Bajo",
+      "descripcion": "Qué está pasando concretamente, mencionando nombres o tickets específicos si aplica",
+      "impacto": "Qué puede pasar si no se atiende (consecuencia concreta)",
+      "recomendacion": "Acción específica y accionable para mitigarlo, con nombres si aplica",
+      "urgencia": "Hoy | Esta semana | Este sprint | Próximo sprint"
+    }
+  ],
+  "riesgosPorPersona": [
+    {
+      "nombre": "nombre del miembro",
+      "nivelRiesgo": "Alto | Medio | Bajo | Sin riesgo",
+      "motivo": "razón concreta: sobrecarga, tickets bloqueados, retrasados, baja precisión, etc."
     }
   ],
   "fortalezas": [
-    "Aspecto positivo del proyecto que reduce el riesgo general"
+    "Aspecto positivo concreto del proyecto o equipo que reduce el riesgo general"
   ],
   "indicadorSemaforo": {
-    "cronograma": "verde",
-    "equipo": "verde",
-    "calidad": "verde",
-    "capacidad": "verde"
+    "cronograma": "rojo | amarillo | verde",
+    "equipo": "rojo | amarillo | verde",
+    "calidad": "rojo | amarillo | verde",
+    "capacidad": "rojo | amarillo | verde"
   }
 }`,
       },

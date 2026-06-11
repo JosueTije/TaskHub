@@ -126,27 +126,97 @@ async function buildAiContext({ projectId, userId, role }) {
   const blockedCount = allTickets.filter((t) => t.status === "BLOCKED").length;
 
   // ── Team metrics ───────────────────────────────────────────────────────
+  const activeSprintTickets = activeSprint?.tickets || [];
   const team = members
     .filter((m) => m.user)
     .map((m) => {
       const mt = allTickets.filter((t) => t.assignedToId === m.userId && t.status !== "CANCELLED");
       const done = mt.filter((t) => t.status === "DONE");
       const blocked = mt.filter((t) => t.status === "BLOCKED");
-      const est = mt.reduce((s, t) => s + (t.estimatedHours || 0), 0);
-      const used = done.reduce((s, t) => s + (t.actualHours || 0), 0);
-      const gpts = gamification
-        .filter((g) => g.userId === m.userId)
-        .reduce((s, g) => s + g.points, 0);
+      const inProgress = mt.filter((t) => t.status === "IN_PROGRESS");
+      const inReview = mt.filter((t) => t.status === "IN_REVIEW");
+      const todo = mt.filter((t) => t.status === "TODO");
+
+      // Sprint activo — carga actual
+      const activeMt = activeSprintTickets.filter(
+        (t) => t.assignedToId === m.userId && t.status !== "CANCELLED"
+      );
+      const activeDone     = activeMt.filter((t) => t.status === "DONE");
+      const activeIp       = activeMt.filter((t) => ["IN_PROGRESS", "IN_REVIEW"].includes(t.status));
+      const activeBlocked  = activeMt.filter((t) => t.status === "BLOCKED");
+      const activeTodo     = activeMt.filter((t) => t.status === "TODO");
+
+      // Tickets retrasados (dueDate pasada, no terminados)
+      const overdue = mt.filter(
+        (t) => t.dueDate && new Date(t.dueDate) < today && !["DONE", "CANCELLED"].includes(t.status)
+      );
+
+      // Story points
+      const spAssigned = mt.reduce((s, t) => s + (t.storyPoints || 0), 0);
+      const spDone     = done.reduce((s, t) => s + (t.storyPoints || 0), 0);
+      const spActive   = activeMt.reduce((s, t) => s + (t.storyPoints || 0), 0);
+
+      // Horas
+      const estTotal = mt.reduce((s, t) => s + (t.estimatedHours || 0), 0);
+      const usedTotal = done.reduce((s, t) => s + (t.actualHours || 0), 0);
+      // Horas pendientes estimadas en sprint activo (tickets no-DONE)
+      const pendingHours = activeMt
+        .filter((t) => t.status !== "DONE")
+        .reduce((s, t) => s + (t.estimatedHours || 0), 0);
+
+      // Ciclo promedio: días entre startedAt y completedAt para tickets DONE
+      const cycleTickets = done.filter((t) => t.startedAt && t.completedAt);
+      const avgCycleDays =
+        cycleTickets.length > 0
+          ? Number(
+              (
+                cycleTickets.reduce(
+                  (s, t) =>
+                    s + (new Date(t.completedAt) - new Date(t.startedAt)) / 86400000,
+                  0
+                ) / cycleTickets.length
+              ).toFixed(1)
+            )
+          : null;
+
+      // Precisión de estimación (de gamificación)
+      const gEvents = gamification.filter((g) => g.userId === m.userId);
+      const gpts = gEvents.reduce((s, g) => s + g.points, 0);
+      const precisionRate =
+        gEvents.length > 0
+          ? Math.round((gEvents.filter((g) => g.precision).length / gEvents.length) * 100)
+          : null;
+
       return {
         name: m.user.fullName,
         role: m.user.role,
+        // General
         assignedTickets: mt.length,
         completedTickets: done.length,
         rendimiento: mt.length > 0 ? Math.round((done.length / mt.length) * 100) : 0,
-        estimatedHours: est,
-        usedHours: used,
-        efficiency: used > 0 ? Number((est / used).toFixed(2)) : null,
+        // Estado de tickets generales
+        todoTickets: todo.length,
+        inProgressTickets: inProgress.length,
+        inReviewTickets: inReview.length,
         blockedTickets: blocked.length,
+        overdueTickets: overdue.length,
+        // Sprint activo
+        activeSprintTotal: activeMt.length,
+        activeSprintDone: activeDone.length,
+        activeSprintInProgress: activeIp.length,
+        activeSprintBlocked: activeBlocked.length,
+        activeSprintTodo: activeTodo.length,
+        activeSprintPendingHours: pendingHours,
+        // Story points
+        storyPointsAssigned: spAssigned,
+        storyPointsDone: spDone,
+        activeSprintSP: spActive,
+        // Horas y eficiencia
+        estimatedHours: estTotal,
+        usedHours: usedTotal,
+        efficiency: usedTotal > 0 ? Number((estTotal / usedTotal).toFixed(2)) : null,
+        avgCycleDays,
+        precisionRate,
         gamificationPoints: gpts,
       };
     });
