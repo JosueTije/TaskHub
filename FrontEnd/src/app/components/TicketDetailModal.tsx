@@ -9,6 +9,7 @@ interface Ticket {
   estimation: number;
   storyPoints?: number;
   assignee: string;
+  assignedToId?: string | null;
   status: 'Backlog' | 'In Progress' | 'Review' | 'Done' | 'Blocked' | 'Cancelled';
   priority: 'Critical' | 'High' | 'Medium' | 'Low';
   sprintId?: string;
@@ -34,6 +35,11 @@ interface Comment {
   timestamp: string;
 }
 
+interface ProjectMember {
+  id: string;
+  name: string;
+}
+
 interface TicketDetailModalProps {
   ticket: Ticket;
   projectName: string;
@@ -42,6 +48,7 @@ interface TicketDetailModalProps {
   canEdit?: boolean;
   userRole?: 'ADMIN' | 'PM' | 'DEVELOPER' | 'VIEWER';
   onDivideTicket?: (ticket: Ticket) => void;
+  projectMembers?: ProjectMember[];
 }
 
 const formatDate = (value?: string | null) => {
@@ -70,6 +77,7 @@ export function TicketDetailModal({
   canEdit = true,
   userRole = 'PM',
   onDivideTicket,
+  projectMembers = [],
 }: TicketDetailModalProps) {
   const [isEditing, setIsEditing] = useState(false);
   const [editedTitle, setEditedTitle] = useState(ticket.title);
@@ -90,6 +98,7 @@ export function TicketDetailModal({
       ? String(ticket.estimatedHours)
       : ''
   );
+  const [selectedAssigneeId, setSelectedAssigneeId] = useState<string | null>(ticket.assignedToId ?? null);
   const [blockReason, setBlockReason] = useState('');
   const [showBlockModal, setShowBlockModal] = useState(false);
 
@@ -136,6 +145,7 @@ export function TicketDetailModal({
       actualHours: selectedStatus === 'Done' ? Number(timeSpent) : null,
       startDate: startDate || null,
       dueDate: dueDate || null,
+      assignedToId: selectedAssigneeId,
     } as any);
 
     setIsEditing(false);
@@ -276,10 +286,23 @@ export function TicketDetailModal({
 
               <div>
                 <label className="text-xs text-[#8E8E93] mb-2 block">Asignado a</label>
-                <div className="flex items-center gap-2 px-3 py-2 bg-[#0F0F0F] rounded-lg border border-white/10">
-                  <User className="w-4 h-4 text-[#8E8E93]" />
-                  <span className="text-sm text-white">{ticket.assignee}</span>
-                </div>
+                {isEditing && canEditFullTicket && projectMembers.length > 0 ? (
+                  <select
+                    value={selectedAssigneeId ?? ''}
+                    onChange={(e) => setSelectedAssigneeId(e.target.value || null)}
+                    className="w-full px-3 py-2 bg-[#0F0F0F] border border-white/10 rounded-lg text-sm text-white focus:outline-none focus:border-[#FF3B30]/50 transition-colors"
+                  >
+                    <option value="" className="bg-[#1C1C1E] text-[#8E8E93]">Sin asignar</option>
+                    {projectMembers.map((m) => (
+                      <option key={m.id} value={m.id} className="bg-[#1C1C1E] text-white">{m.name}</option>
+                    ))}
+                  </select>
+                ) : (
+                  <div className="flex items-center gap-2 px-3 py-2 bg-[#0F0F0F] rounded-lg border border-white/10">
+                    <User className="w-4 h-4 text-[#8E8E93]" />
+                    <span className="text-sm text-white">{ticket.assignee}</span>
+                  </div>
+                )}
               </div>
 
               <div>

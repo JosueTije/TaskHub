@@ -246,6 +246,9 @@ async function confirmSrs(req, res) {
             status: "TODO",
             createdById,
           },
+          include: {
+            assignedTo: { select: { id: true, fullName: true } },
+          },
         });
       })
     );

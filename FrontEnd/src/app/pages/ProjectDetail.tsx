@@ -844,6 +844,7 @@ const handleTicketUpdate = async (ticketId: string, updates: any) => {
           dueDate: updates.dueDate,
           estimatedHours: updates.estimatedHours ?? null,
           actualHours: updates.actualHours,
+          assignedToId: updates.assignedToId,
         }),
       });
       if (putRes.capacityWarning) {
@@ -3332,6 +3333,7 @@ setTicketData({
   canEdit={canEditTickets}
   userRole={role}
   onDivideTicket={handleDivideTicket}
+  projectMembers={assignableDevelopers.map((d: any) => ({ id: d.id, name: d.name }))}
 />}
 
       {showSrsImportModal && (

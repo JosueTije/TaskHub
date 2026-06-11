@@ -703,7 +703,7 @@ export function Projects() {
                 transition={{ delay: 1 }}
               >
                 <Target className="w-5 h-5" style={{ color: colors.accent }} />
-                Proyectos ({filteredProjects.length})
+                Proyectos ({isLoadingProjects ? '…' : filteredProjects.length})
               </motion.h2>
 
               {(searchQuery || riskFilter || statusFilter) && (
@@ -721,8 +721,22 @@ export function Projects() {
             </div>
 
             <AnimatePresence mode="wait">
+              {/* Skeletons mientras carga */}
+              {isLoadingProjects && (
+                <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
+                  {Array.from({ length: 6 }).map((_, i) => (
+                    <div key={i} className={`${colors.bgSecondary} border ${colors.border} rounded-xl p-6 animate-pulse`}>
+                      <div className="h-4 bg-white/10 rounded w-3/4 mb-3" />
+                      <div className="h-3 bg-white/10 rounded w-1/2 mb-6" />
+                      <div className="h-2 bg-white/10 rounded w-full mb-2" />
+                      <div className="h-2 bg-white/10 rounded w-4/5" />
+                    </div>
+                  ))}
+                </div>
+              )}
+
               {/* Grid View */}
-              {viewMode === 'grid' && (
+              {!isLoadingProjects && viewMode === 'grid' && (
                 <motion.div
                   className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6"
                   initial={{ opacity: 0 }}
@@ -833,7 +847,7 @@ export function Projects() {
               )}
 
               {/* Table View */}
-              {viewMode === 'table' && (
+              {!isLoadingProjects && viewMode === 'table' && (
                 <motion.div
                   className={`${colors.bgSecondary} border ${colors.border} rounded-xl overflow-hidden`}
                   initial={{ opacity: 0 }}
@@ -934,7 +948,7 @@ export function Projects() {
               )}
             </AnimatePresence>
 
-            {filteredProjects.length === 0 && (
+            {!isLoadingProjects && filteredProjects.length === 0 && (
               <motion.div
                 className={`${colors.bgSecondary} border ${colors.border} rounded-xl p-12 text-center`}
                 initial={{ opacity: 0, scale: 0.9 }}
