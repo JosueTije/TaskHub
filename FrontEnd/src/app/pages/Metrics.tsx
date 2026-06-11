@@ -24,7 +24,7 @@ interface KPIs {
   progress: number; plannedProgress: number;
   completedStoryPoints: number; totalStoryPoints: number;
   blockedTickets: number; delayedMilestones: number;
-  scheduleVariance: number; spi: number;
+  scheduleVariance: number | null; spi: number | null;
   risk: 'LOW' | 'MEDIUM' | 'HIGH'; officialRiskLevel?: string | null;
   estimatedHours: number; actualHours: number;
   hoursVariance: number; efficiency: number | null;
@@ -285,8 +285,8 @@ export function Metrics() {
             <Section c={c} title="KPIs Estratégicos" tip="Indicadores clave que miden el desempeño global del proyecto: avance, puntualidad, riesgo y eficiencia de cronograma.">
               <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
                 <KpiCard c={c} label="Progreso Real" value={`${kpis.progress}%`} sub={`Planeado: ${kpis.plannedProgress}%`} icon={Target} color="#007AFF" trend={kpis.progress >= kpis.plannedProgress ? 'up' : 'down'} tip="Story points completados (DONE) ÷ story points totales × 100." />
-                <KpiCard c={c} label="Varianza Cronograma" value={`${kpis.scheduleVariance > 0 ? '+' : ''}${kpis.scheduleVariance}pp`} icon={Activity} color={kpis.scheduleVariance >= 0 ? '#34C759' : '#FF3B30'} trend={kpis.scheduleVariance >= 0 ? 'up' : 'down'} tip="Progreso Real − Progreso Planeado en puntos porcentuales (pp)." />
-                <KpiCard c={c} label="SPI" value={kpis.spi} sub={kpis.spi >= 1 ? 'A tiempo' : 'Retrasado'} icon={TrendingUp} color={kpis.spi >= 1 ? '#34C759' : kpis.spi >= 0.8 ? '#FF9F0A' : '#FF3B30'} trend={kpis.spi >= 1 ? 'up' : 'down'} tip="Schedule Performance Index: Progreso Real ÷ Progreso Planeado." />
+                <KpiCard c={c} label="Varianza Cronograma" value={kpis.scheduleVariance === null ? 'Sin datos' : `${kpis.scheduleVariance > 0 ? '+' : ''}${kpis.scheduleVariance}pp`} icon={Activity} color={kpis.scheduleVariance === null ? '#8E8E93' : kpis.scheduleVariance >= 0 ? '#34C759' : '#FF3B30'} trend={kpis.scheduleVariance === null ? 'neutral' : kpis.scheduleVariance >= 0 ? 'up' : 'down'} tip="Progreso Real − Progreso Planeado en puntos porcentuales (pp)." />
+                <KpiCard c={c} label="SPI" value={kpis.spi === null ? 'Sin datos' : kpis.spi} sub={kpis.spi === null ? 'Sin sprint activo o sin tickets completados' : kpis.spi >= 1 ? 'A tiempo' : 'Retrasado'} icon={TrendingUp} color={kpis.spi === null ? '#8E8E93' : kpis.spi >= 1 ? '#34C759' : kpis.spi >= 0.8 ? '#FF9F0A' : '#FF3B30'} trend={kpis.spi === null ? 'neutral' : kpis.spi >= 1 ? 'up' : 'down'} tip="Schedule Performance Index: Progreso Real ÷ Progreso Planeado." />
                 <KpiCard c={c} label="Tickets Vencidos" value={kpis.delayedMilestones} icon={Clock} color={kpis.delayedMilestones === 0 ? '#34C759' : '#FF9F0A'} trend={kpis.delayedMilestones === 0 ? 'neutral' : 'down'} tip="Tickets con fecha límite vencida que aún no están completados." />
                 <KpiCard c={c} label="Riesgo operacional" value={RISK_LABEL[kpis.risk]} sub={kpis.officialRiskLevel && kpis.officialRiskLevel !== kpis.risk ? `Asignado: ${RISK_LABEL[kpis.officialRiskLevel] ?? kpis.officialRiskLevel} · ${kpis.blockedTickets} bloqueados` : `${kpis.blockedTickets} bloqueados`} icon={Shield} color={RISK_COLOR[kpis.risk]} tip="Riesgo calculado: ALTO si ≥3 bloqueados/vencidos o SPI<0.8; MEDIO si ≥1 o SPI<1." />
               </div>
