@@ -1,5 +1,5 @@
 const prisma = require("../config/prisma");
-const { PRIORITY_POINTS, ticketScore } = require("../utils/scoring");
+const { ticketScore } = require("../utils/scoring");
 
 function clamp(num, min, max) {
   return Math.max(min, Math.min(max, num));
@@ -163,33 +163,49 @@ const efficiency =
     activeSprintProgress = Math.round((doneCnt / activeSprintTickets.length) * 100);
   }
 
-const scheduleVariance =
-  activeSprintTickets.length === 0
-    ? null
-    : activeSprintProgress - plannedProgress;
+  // ── SPI / Schedule Variance ──────────────────────────────────────────────
+  // Primary: use the active sprint scope (avoids inflation from deleted tickets).
+  // Fallback: when no active sprint exists, use overall project progress so the
+  //           dashboard still shows meaningful metrics instead of "-".
+  let scheduleVariance;
+  let spi;
 
-const hasWorkStarted = activeSprintDoneSP > 0 || activeSprintTickets.some((t) => t.status === "DONE");
-
-const spi =
-  activeSprintTickets.length > 0 && hasWorkStarted && plannedProgress > 0
-    ? Number((activeSprintProgress / plannedProgress).toFixed(2))
-    : null;
+  if (activeSprintTickets.length > 0) {
+    const hasWorkStarted = activeSprintDoneSP > 0 || activeSprintTickets.some((t) => t.status === "DONE");
+    scheduleVariance = activeSprintProgress - plannedProgress;
+    spi = hasWorkStarted && plannedProgress > 0
+      ? Number((activeSprintProgress / plannedProgress).toFixed(2))
+      : null;
+  } else if (activeTickets.length > 0) {
+    // No active sprint — fall back to project-level progress
+    scheduleVariance = progress - plannedProgress;
+    const hasAnyDone = completedTickets.length > 0;
+    spi = hasAnyDone && plannedProgress > 0
+      ? Number((progress / plannedProgress).toFixed(2))
+      : null;
+  } else {
+    scheduleVariance = null;
+    spi = null;
+  }
 
   // ===============================
   // Risk
   // ===============================
   let risk = "LOW";
 
+  // Guard: only compare spi when it is not null.
+  // null < 0.8 → true in JS (null coerces to 0), which would force HIGH risk
+  // on every project without an active sprint.
   if (
     delayedTickets >= 3 ||
     blocked >= 3 ||
-    spi < 0.8
+    (spi !== null && spi < 0.8)
   ) {
     risk = "HIGH";
   } else if (
     delayedTickets >= 1 ||
     blocked >= 1 ||
-    spi < 1
+    (spi !== null && spi < 1)
   ) {
     risk = "MEDIUM";
   }
